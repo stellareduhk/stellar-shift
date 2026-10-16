@@ -135,7 +135,7 @@
     <!-- 個人報更雙重驗證查詢 -->
     <div id="queryContainer" class="flex flex-wrap items-center gap-2">
       <input type="text" id="inputQueryTutorId" placeholder="導師編號 (如 005)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 w-36">
-      <input type="text" id="inputQueryTutorSurname" placeholder="導師姓氏 (如 陳)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 w-36">
+      <input type="text" id="inputQueryTutorSurname" placeholder="導師姓氏 (如 chan)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 w-36">
       <button id="btnSearchMyRecords" onclick="handleSearchMyRecordsAction()" class="bg-amber-400/20 text-amber-300 border border-amber-400/40 hover:bg-amber-400 hover:text-slate-900 px-3 py-1.5 rounded text-xs font-bold transition">🔍 查詢我嘅報更</button>
       <button id="btnClearQuery" onclick="clearQuery()" style="display: none;" class="bg-slate-800 text-slate-400 hover:text-white px-2 py-1.5 rounded text-xs">✕ 清除</button>
     </div>
@@ -144,8 +144,8 @@
     <div id="editInputs" style="display: none;" class="w-full space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <input type="text" id="inputTutorId" placeholder="編號 (如 005)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm w-32 text-white focus:outline-none focus:border-amber-400">
-        <input type="text" id="inputTutorSurname" placeholder="姓氏 (如 陳)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm w-32 text-white focus:outline-none focus:border-amber-400">
-        <input type="text" id="inputTutorName" placeholder="名字/簡稱 (如 Rainbow)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm w-40 text-white focus:outline-none focus:border-amber-400">
+        <input type="text" id="inputTutorSurname" placeholder="姓氏 (如 chan)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm w-32 text-white focus:outline-none focus:border-amber-400">
+        <input type="text" id="inputTutorName" placeholder="名字/簡稱 (如 Ricky)" class="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm w-40 text-white focus:outline-none focus:border-amber-400">
         
         <!-- 🌟 載入舊報更按鈕 (綁定加載動畫) -->
         <button id="btnLoadExistingForEdit" onclick="handleLoadExistingForEditAction()" class="bg-purple-900/60 text-purple-200 border border-purple-500/60 hover:bg-purple-800 px-3.5 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">
@@ -2275,7 +2275,7 @@ function updateOMUIState() {
       const surname = document.getElementById('inputTutorSurname').value.trim();
 
       if (!rawId || !surname) {
-        customAlert('請先輸入「編號 (如 005)」與「姓氏 (如 陳)」，系統先能為你載入舊報更資料！');
+        customAlert('請先輸入「編號 (如 005)」與「姓氏 (如 chan)」，系統先能為你載入舊報更資料！');
         return;
       }
 
@@ -3771,7 +3771,7 @@ function updateOMUIState() {
       const surname = document.getElementById('inputQueryTutorSurname').value.trim();
 
       if (!rawId || !surname) {
-        customAlert('請同時輸入導師編號 (如 005) 及 導師姓氏 (如 陳)！');
+        customAlert('請同時輸入導師編號 (如 005) 及 導師姓氏 (如 chan)！');
         return;
       }
       
