@@ -1830,11 +1830,11 @@
             `;
           }
 
-          // 🌟 總請假/缺席數 = 突發缺席 + 計劃補堂
-          const totalLeaveCount = totalAbsent + totalPlannedMakeup;
+		// 🌟 總缺席數純粹等於真實缺席 (❌)，計劃補堂 (🔄) 只是預約席位，不增加缺席
+        const totalLeaveCount = totalAbsent;
 
-          // 🌟 待補庫存 = (突發缺席 + 計劃補堂) - 已補堂出席
-          const netMakeupPending = Math.max(0, totalLeaveCount - totalMakeupUsed);
+        // 🌟 待補庫存 = 真實缺席 - 已補堂出席
+        const netMakeupPending = Math.max(0, totalAbsent - totalMakeupUsed);
 
           tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-emerald-400">${totalPresent}</td>`;
           tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-red-400">${totalLeaveCount}</td>`;
@@ -1985,7 +1985,7 @@
             const slotOverride = attendanceSlotOverrideMap[key] || '';
             const effectiveSlot = slotOverride || baseSlot;
 
-            if (['PRESENT', 'LATE', 'MAKEUP', 'SCHEDULED'].includes(currentStatus) && !isClosed) {
+            if (['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT', 'SCHEDULED'].includes(currentStatus) && !isClosed) {
               const isHigh = isHighGrade(st.grade);
               if (effectiveSlot === 'S1') {
                 if (isHigh) s1High++; else s1Low++;
