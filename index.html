@@ -865,6 +865,7 @@
     let attendanceStateMap = {}; 
     let attendanceSlotOverrideMap = {}; 
     let attendanceRemarksMap = {}; 
+	let prevMonthBalanceMap = {};
     let tutorRatioMatrixList = []; 
     let activeCellEditingInfo = null; 
 
@@ -1487,16 +1488,24 @@
       if (!container) return;
       container.innerHTML = `<p class="text-xs text-amber-400 text-center py-8">⚡ 正在載入雙庫數據與梯級算力矩陣中...</p>`;
 
-      try {
-        const [attRes, matrixRes] = await Promise.all([
+		try {
+        // 🌟 時空探針：自動推算上一個月 (T-1) 的 Poll ID
+        const prevDateObj = new Date(scheduleActiveYear, scheduleActiveMonth - 2, 1);
+        const prevPollId = `${prevDateObj.getFullYear()}-${String(prevDateObj.getMonth() + 1).padStart(2, '0')}`;
+
+        // 🌟 三庫同步抓取：本月簽到 + 梯級算力矩陣 + 上月歷史簽到
+        const [attRes, matrixRes, prevAttRes] = await Promise.all([
           fetch(`${API_URL}?action=getStudentAttendance&pollId=${schedulePollId}`).then(r => r.json()),
-          fetch(`${API_URL}?action=getTutorRatioMatrix`).then(r => r.json())
+          fetch(`${API_URL}?action=getTutorRatioMatrix`).then(r => r.json()),
+          fetch(`${API_URL}?action=getStudentAttendance&pollId=${prevPollId}`).then(r => r.json()).catch(() => ({ status: 'success', data: [] }))
         ]);
 
         attendanceStateMap = {};
         attendanceSlotOverrideMap = {};
         attendanceRemarksMap = {};
+        prevMonthBalanceMap = {};
 
+        // 1. 本月出勤映射
         if (attRes.status === 'success' && attRes.data) {
           attRes.data.forEach(item => {
             const key = `${item.studentId}_${item.date}`;
@@ -1506,8 +1515,31 @@
           });
         }
 
+        // 2. 算力矩陣映射
         if (matrixRes.status === 'success' && matrixRes.data) {
           tutorRatioMatrixList = matrixRes.data;
+        }
+
+        // 3. 🌟 上月欠課結餘計算 (真實缺席 - 已補出席，落入 T+1 滾存)
+        if (prevAttRes && prevAttRes.status === 'success' && prevAttRes.data) {
+          const prevAbsentCountMap = {};
+          const prevMakeupUsedMap = {};
+
+          prevAttRes.data.forEach(item => {
+            const sid = item.studentId;
+            if (item.status === 'ABSENT') {
+              prevAbsentCountMap[sid] = (prevAbsentCountMap[sid] || 0) + 1;
+            } else if (item.status === 'MAKEUP_PRESENT') {
+              prevMakeupUsedMap[sid] = (prevMakeupUsedMap[sid] || 0) + 1;
+            }
+          });
+
+          Object.keys(prevAbsentCountMap).forEach(sid => {
+            const net = (prevAbsentCountMap[sid] || 0) - (prevMakeupUsedMap[sid] || 0);
+            if (net > 0) {
+              prevMonthBalanceMap[sid] = net;
+            }
+          });
         }
 
         renderScheduleGrid();
@@ -1696,9 +1728,10 @@
         `;
       }
 
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[40px] text-emerald-400">出席</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[40px] text-red-400">缺席</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[45px] text-blue-400">待補</th>`;
+	  tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-emerald-400">出席</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-red-400">缺席</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-sky-400">上月</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-purple-300">待補</th>`;
       tableHtml += `</tr></thead><tbody>`;
 
       const dailyS1HighCount = new Array(daysInMonth + 1).fill(0);
@@ -1830,16 +1863,20 @@
             `;
           }
 
-		// 🌟 總缺席數純粹等於真實缺席 (❌)，計劃補堂 (🔄) 只是預約席位，不增加缺席
-        const totalLeaveCount = totalAbsent;
+	    // 🌟 四柱算力大一統：上月結餘 (藍) + 本月缺席 (紅) - 本月補堂出席 = 待補總數 (紫)
+        const prevBalance = prevMonthBalanceMap[st.studentId] || 0;
+        const currentAbsent = totalAbsent;
+        const netMakeupPending = Math.max(0, (prevBalance + currentAbsent) - totalMakeupUsed);
 
-        // 🌟 待補庫存 = 真實缺席 - 已補堂出席
-        const netMakeupPending = Math.max(0, totalAbsent - totalMakeupUsed);
-
-          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-emerald-400">${totalPresent}</td>`;
-          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-red-400">${totalLeaveCount}</td>`;
-          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold ${netMakeupPending > 0 ? 'text-amber-300 bg-amber-950/30' : 'text-slate-500'}">${netMakeupPending}</td>`;
-          tableHtml += `</tr>`;
+        // 1. 綠色：出席 (本月到課)
+        tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-emerald-400">${totalPresent}</td>`;
+        // 2. 紅色：缺席 (本月新增紅叉)
+        tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-red-400">${currentAbsent}</td>`;
+        // 3. 藍色：上月 (歷史承接存量)
+        tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold ${prevBalance > 0 ? 'text-sky-400 bg-sky-950/30' : 'text-slate-500'}">${prevBalance}</td>`;
+        // 4. 紫色：待補 (大一統最終負債)
+        tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold ${netMakeupPending > 0 ? 'text-purple-300 bg-purple-950/40 shadow-sm' : 'text-slate-500'}">${netMakeupPending}</td>`;
+        tableHtml += `</tr>`;
         });
       });
 
@@ -1850,7 +1887,7 @@
         const totalS1 = dailyS1HighCount[day] + dailyS1LowCount[day];
         tableHtml += `<td class="p-1 border border-slate-700 text-center text-amber-300">${totalS1}</td>`;
       }
-      tableHtml += `<td colspan="3" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
+      tableHtml += `<td colspan="4" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
 
       tableHtml += `<tr class="bg-slate-950 font-bold">`;
       tableHtml += `<td colspan="3" class="p-2 border border-slate-700 text-blue-400 sticky left-0 bg-slate-950 z-10">第二節 (S2) 學生總人數 (高/低)</td>`;
@@ -1858,7 +1895,7 @@
         const totalS2 = dailyS2HighCount[day] + dailyS2LowCount[day];
         tableHtml += `<td class="p-1 border border-slate-700 text-center text-blue-300">${totalS2}</td>`;
       }
-      tableHtml += `<td colspan="3" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
+      tableHtml += `<td colspan="4" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
 
       tableHtml += `<tr class="bg-slate-950 font-bold text-[10px]">`;
       tableHtml += `<td colspan="3" class="p-2 border border-slate-700 text-purple-300 sticky left-0 bg-slate-950 z-10">對應人手標籤 (S1/S2 導師數)</td>`;
@@ -1879,7 +1916,7 @@
           tableHtml += `<td class="p-1 border border-slate-700 text-center text-purple-300 font-bold">${s1Ratio.text}/${s2Ratio.text}</td>`;
         }
       }
-      tableHtml += `<td colspan="3" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
+      tableHtml += `<td colspan="4" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
 
       tableHtml += `</tbody></table>`;
       container.innerHTML = tableHtml;
