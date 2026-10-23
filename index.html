@@ -56,25 +56,29 @@
       box-shadow: inset 0 0 6px rgba(192, 132, 252, 0.4) !important;
     }
 
-	/* 🖨️ 簽到表專用實體列印樣式 (A4 橫向極致單頁版・高對比灰底) */
+	/* 🖨️ 簽到表專用實體列印樣式 (雙軌解耦・A4 橫向極致單頁版) */
     @media print {
-      @page { size: landscape; margin: 4mm; }
-      *, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      body * { visibility: hidden; }
-      #printableScheduleArea, #printableScheduleArea * { visibility: visible; }
-      
-      #studentModal, .stellar-card, #subtabScheduleContainer {
-        position: static !important;
-        max-height: none !important;
-        overflow: visible !important;
-        height: auto !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: none !important;
-        background: transparent !important;
+      @page { 
+        size: landscape; 
+        margin: 4mm; 
+      }
+      *, body { 
+        -webkit-print-color-adjust: exact !important; 
+        print-color-adjust: exact !important; 
       }
       
-      #printableScheduleArea { 
+      /* 1. 隱藏網頁上的一切元素 (包括網頁版簽到表與彈窗) */
+      body * { 
+        visibility: hidden !important; 
+      }
+      
+      /* 2. 只顯示專屬實體列印容器 */
+      #stellarPrintContainer, #stellarPrintContainer * { 
+        visibility: visible !important; 
+      }
+      
+      #stellarPrintContainer { 
+        display: block !important;
         position: absolute !important; 
         left: 0 !important; 
         top: 0 !important; 
@@ -86,32 +90,32 @@
         border: none !important;
       }
 
-      /* 實體表格細黑線與緊湊字體排版 (確保 1 張紙過) */
-      #printableScheduleArea table { 
+      /* 3. 緊湊表格排版 (25行以內保證 100% 收納於 1 張 A4 內) */
+      #stellarPrintContainer table { 
         width: 100% !important; 
         border-collapse: collapse !important; 
         border: 1.5px solid #000 !important; 
-        font-size: 9.5px !important;
-        line-height: 1.15 !important;
+        font-size: 8.5px !important;
+        line-height: 1 !important;
+        table-layout: fixed !important;
       }
-      #printableScheduleArea th, #printableScheduleArea td { 
+      #stellarPrintContainer th, #stellarPrintContainer td { 
         border: 1px solid #000 !important; 
         color: #000 !important; 
-        padding: 2px 1px !important;
+        padding: 1.5px 1px !important;
+        height: 18px !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
       }
 
-      /* 🌟 核心灰底：唔返學的日子強制填滿淺灰色 (與手打表格完全一致) */
-      .print-off-day { 
+      /* 🌟 核心灰底：唔返學的日子強制填滿淺灰色 */
+      .print-off-cell { 
         background-color: #D4D4D8 !important; 
-        -webkit-print-color-adjust: exact !important; 
-        print-color-adjust: exact !important; 
       }
-      .print-on-day { 
+      /* 🌟 上課日純白留空格仔 */
+      .print-on-cell { 
         background-color: #FFFFFF !important; 
       }
-      
-      /* 列印時將螢幕用的點名符號 (● 或 —) 隱藏，保持白格外觀乾淨供手寫 */
-      .screen-mark { display: none !important; }
 
       .no-print { display: none !important; }
     }
@@ -881,6 +885,9 @@
     </div>
   </div>
 
+  <!-- 🖨️ 專屬實體列印容器 (平時完全隱形，列印時才被喚醒) -->
+  <div id="stellarPrintContainer" style="display: none;"></div>
+	
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbyiENwWZNoptny_rjAW9eHaZ1BhiOjHbQiy3rW9L3RAki6EVDLYiPyP1zIyAsziS8rWJg/exec";
 
@@ -1865,7 +1872,8 @@
       };
     }
 
-	function renderScheduleGrid() {
+	// 🌟 軌道 A：網頁螢幕專用簽到表 (100% 還原深色主題、點名圖示與分組色塊，無多餘列印標題)
+    function renderScheduleGrid() {
       const container = document.getElementById('scheduleTableContainer');
       if (!container) return;
       const activeStudents = masterStudentsList.filter(s => s.status === 'Active');
@@ -1918,40 +1926,11 @@
         { title: '🟣 週末專科班 / 面試班 / 特別時段', students: groupSpecial, bgClass: 'bg-purple-950/40 text-purple-300' }
       ];
 
-      // 🌟 今日匯出日期 (YYYYMMDD) 與列印版本號 (V1/V2...)
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mmStr = String(now.getMonth() + 1).padStart(2, '0');
-      const ddStr = String(now.getDate()).padStart(2, '0');
-      const exportDateStr = `${yyyy}${mmStr}${ddStr}`;
-      const currentVersion = `V${pdfPrintCounts[schedulePollId] || 1}`;
-
       let tableHtml = `<table class="w-full text-left text-xs border-collapse border border-slate-700">`;
-
-      // 🌟 1. 頂部大表頭 (對齊 2610學生.JPG 實體表格樣貌)
-      tableHtml += `
-        <thead>
-          <tr class="bg-white text-black font-bold text-sm">
-            <th colspan="3" class="p-2 border border-black text-left text-base font-extrabold bg-white text-black">
-              ${scheduleActiveMonth}月
-            </th>
-            <th colspan="${daysInMonth}" class="p-2 border border-black text-center text-sm md:text-base font-extrabold bg-white text-black tracking-wider">
-              功輔班 學生上課時間_${exportDateStr}
-            </th>
-            <th colspan="2" class="p-2 border border-black text-center font-bold bg-white text-black">
-              簽到表
-            </th>
-            <th colspan="2" class="p-2 border border-black text-center font-extrabold bg-white text-black text-sm">
-              ${currentVersion}
-            </th>
-          </tr>
-      `;
-
-      // 🌟 2. 欄位標題行 (姓名、年級、時段、1-31日、統計)
-      tableHtml += `<tr class="bg-slate-950 text-amber-400 font-bold">`;
-      tableHtml += `<th class="p-1 border border-slate-700 min-w-[70px] sticky left-0 bg-slate-950 z-10 text-center">學員姓名</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[32px]">年級</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[36px]">時段</th>`;
+      tableHtml += `<thead class="bg-slate-950 text-amber-400"><tr>`;
+      tableHtml += `<th class="p-2 border border-slate-700 min-w-[120px] sticky left-0 bg-slate-950 z-10">學員姓名</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[35px]">年級</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[45px]">時段</th>`;
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -1962,17 +1941,17 @@
         const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || isHkHol));
 
         tableHtml += `
-          <th class="p-0.5 border border-slate-700 text-center min-w-[22px] ${isClosed ? 'bg-red-950/40 text-red-400 print-off-day' : ''}">
-            <div class="leading-tight">${day}</div>
-            <div class="text-[8.5px] font-normal leading-tight">${wDay}</div>
+          <th class="p-1 border border-slate-700 text-center min-w-[32px] ${isClosed ? 'bg-red-950/40 text-red-400' : ''}">
+            <div>${day}</div>
+            <div class="text-[9px] font-normal">${wDay}</div>
           </th>
         `;
       }
 
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[32px] text-emerald-400">出席</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[32px] text-red-400">缺席</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[32px] text-sky-400">上月</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[32px] text-purple-300">待補</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-emerald-400">出席</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-red-400">缺席</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-sky-400">上月</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-purple-300">待補</th>`;
       tableHtml += `</tr></thead><tbody>`;
 
       const dailyS1HighCount = new Array(daysInMonth + 1).fill(0);
@@ -1988,9 +1967,8 @@
       scheduleGroups.forEach(grp => {
         if (grp.students.length === 0) return;
 
-        // 分組標題行：加上 no-print，列印時不佔空間
         tableHtml += `
-          <tr class="${grp.bgClass} font-bold no-print">
+          <tr class="${grp.bgClass} font-bold">
             <td colspan="${daysInMonth + 7}" class="p-1.5 border border-slate-700 tracking-wider">
               ${grp.title} (${grp.students.length} 人)
             </td>
@@ -2007,9 +1985,9 @@
           let totalMakeupUsed = 0;
 
           tableHtml += `<tr class="hover:bg-slate-800/50 transition">`;
-          tableHtml += `<td class="p-1 border border-slate-700 font-bold text-slate-100 bg-slate-900/80 sticky left-0 z-10 text-center truncate">${st.studentName}</td>`;
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center text-purple-300 font-bold">${st.grade}</td>`;
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center font-bold ${baseSlot === 'S1' ? 'text-amber-400' : 'text-blue-400'}">${baseSlot}</td>`;
+          tableHtml += `<td class="p-2 border border-slate-700 font-bold text-slate-100 bg-slate-900/80 sticky left-0 z-10">${st.studentName}</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center text-purple-300 font-bold">${st.grade}</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold ${baseSlot === 'S1' ? 'text-amber-400' : 'text-blue-400'}">${baseSlot}</td>`;
 
           for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -2026,55 +2004,43 @@
             const effectiveSlot = slotOverride || baseSlot;
 
             let cellBgClass = "bg-slate-950/40 text-slate-600";
-            let printClass = "print-off-day"; // 預設列印為灰底
             let cellText = "—";
 
             const isAttending = ['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT', 'SCHEDULED'].includes(currentStatus);
 
             if (currentStatus === 'PRESENT') {
               cellBgClass = "bg-emerald-600 text-white font-bold cursor-pointer";
-              printClass = "print-on-day";
               cellText = "✅";
               totalPresent++;
             } else if (currentStatus === 'LATE') {
               cellBgClass = "bg-amber-500 text-slate-900 font-bold cursor-pointer";
-              printClass = "print-on-day";
               cellText = "⏱️";
               totalPresent++;
             } else if (currentStatus === 'ABSENT') {
               cellBgClass = "bg-red-600 text-white font-bold cursor-pointer";
-              printClass = "print-off-day";
               cellText = "❌";
               totalAbsent++;
             } else if (currentStatus === 'MAKEUP') {
               cellBgClass = "bg-blue-900/80 text-blue-300 font-bold cursor-pointer border border-blue-400";
-              printClass = "print-on-day";
               cellText = "🔄";
               totalPlannedMakeup++;
             } else if (currentStatus === 'MAKEUP_PRESENT') {
               cellBgClass = "bg-blue-600 text-white font-bold cursor-pointer shadow-lg";
-              printClass = "print-on-day";
               cellText = "🔄";
               totalPresent++;
               totalMakeupUsed++;
             } else if (currentStatus === 'CANCELLED') {
               cellBgClass = "bg-purple-900/80 text-purple-200 cursor-pointer";
-              printClass = "print-off-day"; // 請假列印為灰底
               cellText = "🔒";
             } else if (isRegularSchoolDay) {
-              // 🌟 常規上堂日：螢幕顯示黑點，列印時為純白空白格 (print-on-day)
               cellBgClass = "bg-slate-800 text-slate-400 hover:border-amber-400 cursor-pointer";
-              printClass = "print-on-day";
-              cellText = `<span class="screen-mark">●</span>`;
+              cellText = "●";
             } else if (isClosed) {
               cellBgClass = "bg-red-950/20 text-red-900/40 cursor-not-allowed";
-              printClass = "print-off-day";
-              cellText = `<span class="screen-mark">休</span>`;
+              cellText = "休";
             } else {
-              // 🌟 唔使返學的日子 (非更表日/未開學)：強制列印為灰底 (print-off-day)
               cellBgClass = "bg-slate-950/40 text-slate-700 hover:text-slate-300 cursor-pointer";
-              printClass = "print-off-day";
-              cellText = `<span class="screen-mark">—</span>`;
+              cellText = "—";
             }
 
             if (isAttending && !isClosed) {
@@ -2110,7 +2076,7 @@
             }
 
             tableHtml += `
-              <td onclick="openStudentCellModal('${st.studentId}', '${dateStr}')" class="p-0.5 border border-slate-700 text-center ${cellBgClass} ${printClass} select-none transition" title="${st.studentName} - ${dateStr}">
+              <td onclick="openStudentCellModal('${st.studentId}', '${dateStr}')" class="p-1 border border-slate-700 text-center ${cellBgClass} select-none transition" title="${st.studentName} - ${dateStr}">
                 ${cellText}
               </td>
             `;
@@ -2120,40 +2086,40 @@
           const currentAbsent = totalAbsent;
           const netMakeupPending = Math.max(0, (prevBalance + currentAbsent) - totalMakeupUsed);
 
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center font-bold text-emerald-400 print-on-day">${totalPresent}</td>`;
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center font-bold text-red-400 print-on-day">${currentAbsent}</td>`;
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center font-bold ${prevBalance > 0 ? 'text-sky-400 bg-sky-950/30' : 'text-slate-500'} print-on-day">${prevBalance}</td>`;
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center font-bold ${netMakeupPending > 0 ? 'text-purple-300 bg-purple-950/40' : 'text-slate-500'} print-on-day">${netMakeupPending}</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-emerald-400">${totalPresent}</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-red-400">${currentAbsent}</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold ${prevBalance > 0 ? 'text-sky-400 bg-sky-950/30' : 'text-slate-500'}">${prevBalance}</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center font-bold ${netMakeupPending > 0 ? 'text-purple-300 bg-purple-950/40 shadow-sm' : 'text-slate-500'}">${netMakeupPending}</td>`;
           tableHtml += `</tr>`;
         });
       });
 
-      // 🌟 3. 底部人手統計行：全部加上 class="no-print"，列印時自動隱形釋放空間
-      tableHtml += `<tr class="bg-slate-950 font-bold border-t-2 border-amber-400/60 no-print">`;
-      tableHtml += `<td colspan="3" class="p-1 border border-slate-700 text-amber-400 sticky left-0 bg-slate-950 z-10">第一節 (S1) 學生總人數 (高/低)</td>`;
+      // 網頁版底部統計行
+      tableHtml += `<tr class="bg-slate-950 font-bold border-t-2 border-amber-400/60">`;
+      tableHtml += `<td colspan="3" class="p-2 border border-slate-700 text-amber-400 sticky left-0 bg-slate-950 z-10">第一節 (S1) 學生總人數 (高/低)</td>`;
       for (let day = 1; day <= daysInMonth; day++) {
         const totalS1 = dailyS1HighCount[day] + dailyS1LowCount[day];
-        tableHtml += `<td class="p-0.5 border border-slate-700 text-center text-amber-300">${totalS1}</td>`;
+        tableHtml += `<td class="p-1 border border-slate-700 text-center text-amber-300">${totalS1}</td>`;
       }
-      tableHtml += `<td colspan="4" class="p-0.5 border border-slate-700 bg-slate-950"></td></tr>`;
+      tableHtml += `<td colspan="4" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
 
-      tableHtml += `<tr class="bg-slate-950 font-bold no-print">`;
-      tableHtml += `<td colspan="3" class="p-1 border border-slate-700 text-blue-400 sticky left-0 bg-slate-950 z-10">第二節 (S2) 學生總人數 (高/低)</td>`;
+      tableHtml += `<tr class="bg-slate-950 font-bold">`;
+      tableHtml += `<td colspan="3" class="p-2 border border-slate-700 text-blue-400 sticky left-0 bg-slate-950 z-10">第二節 (S2) 學生總人數 (高/低)</td>`;
       for (let day = 1; day <= daysInMonth; day++) {
         const totalS2 = dailyS2HighCount[day] + dailyS2LowCount[day];
-        tableHtml += `<td class="p-0.5 border border-slate-700 text-center text-blue-300">${totalS2}</td>`;
+        tableHtml += `<td class="p-1 border border-slate-700 text-center text-blue-300">${totalS2}</td>`;
       }
-      tableHtml += `<td colspan="4" class="p-0.5 border border-slate-700 bg-slate-950"></td></tr>`;
+      tableHtml += `<td colspan="4" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
 
-      tableHtml += `<tr class="bg-slate-950 font-bold text-[10px] no-print">`;
-      tableHtml += `<td colspan="3" class="p-1 border border-slate-700 text-purple-300 sticky left-0 bg-slate-950 z-10">對應人手標籤 (S1/S2 導師數)</td>`;
+      tableHtml += `<tr class="bg-slate-950 font-bold text-[10px]">`;
+      tableHtml += `<td colspan="3" class="p-2 border border-slate-700 text-purple-300 sticky left-0 bg-slate-950 z-10">對應人手標籤 (S1/S2 導師數)</td>`;
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const dateObj = new Date(scheduleActiveYear, scheduleActiveMonth - 1, day);
         const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (dateObj.getDay() === 0 || hkPublicHolidays.includes(dateStr)));
 
         if (isClosed) {
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center text-slate-600">0/0</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center text-slate-600">0/0</td>`;
         } else {
           const totalS1 = dailyS1HighCount[day] + dailyS1LowCount[day];
           const totalS2 = dailyS2HighCount[day] + dailyS2LowCount[day];
@@ -2161,13 +2127,164 @@
           const s1Ratio = calculateTutorRatio(scheduleActiveMonth, totalS1, dailyS1SpecialTutors[day], dailyS1DeductStudents[day]);
           const s2Ratio = calculateTutorRatio(scheduleActiveMonth, totalS2, dailyS2SpecialTutors[day], dailyS2DeductStudents[day]);
 
-          tableHtml += `<td class="p-0.5 border border-slate-700 text-center text-purple-300 font-bold">${s1Ratio.text}/${s2Ratio.text}</td>`;
+          tableHtml += `<td class="p-1 border border-slate-700 text-center text-purple-300 font-bold">${s1Ratio.text}/${s2Ratio.text}</td>`;
         }
       }
-      tableHtml += `<td colspan="4" class="p-0.5 border border-slate-700 bg-slate-950"></td></tr>`;
+      tableHtml += `<td colspan="4" class="p-1 border border-slate-700 bg-slate-950"></td></tr>`;
 
       tableHtml += `</tbody></table>`;
       container.innerHTML = tableHtml;
+    }
+
+    // 🌟 軌道 B：實體紙本專屬印製引擎 (完全對位 2610學生.JPG：有大表頭、分組清楚、要返學＝純白空白格仔、唔返學＝全灰底、保證 1 頁橫向 A4)
+    function buildPrintScheduleTable() {
+      const printContainer = document.getElementById('stellarPrintContainer');
+      if (!printContainer) return;
+
+      const activeStudents = masterStudentsList.filter(s => s.status === 'Active');
+      const daysInMonth = new Date(scheduleActiveYear, scheduleActiveMonth, 0).getDate();
+      const setting = allSettingsList.find(s => s.pollId === schedulePollId);
+      const closedDates = setting && setting.closedDates ? setting.closedDates.split(',').filter(Boolean) : [];
+      const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
+
+      const isHighGrade = (grade) => ['P4', 'P5', 'P6', 'S1', 'S2', 'S3'].includes(grade);
+
+      const groupS1High = [];
+      const groupS1Low = [];
+      const groupS2High = [];
+      const groupS2Low = [];
+      const groupSpecial = [];
+
+      activeStudents.forEach(st => {
+        const cType = st.courseType || '功課班';
+        const slot = st.timeSlot || 'S1';
+
+        if (cType === '專科班' || cType === '面試班' || slot === 'S3') {
+          groupSpecial.push(st);
+        } else if (slot === 'S1') {
+          if (isHighGrade(st.grade)) groupS1High.push(st);
+          else groupS1Low.push(st);
+        } else {
+          if (isHighGrade(st.grade)) groupS2High.push(st);
+          else groupS2Low.push(st);
+        }
+      });
+
+      const sortByName = (a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'zh-HK');
+      groupS1High.sort(sortByName);
+      groupS1Low.sort(sortByName);
+      groupS2High.sort(sortByName);
+      groupS2Low.sort(sortByName);
+      groupSpecial.sort(sortByName);
+
+      const printGroups = [
+        { label: '第一節 (S1) 高年級 (P4 - P6)', students: groupS1High },
+        { label: '第一節 (S1) 低年級 (P1 - P3)', students: groupS1Low },
+        { label: '第二節 (S2) 高年級 (P4 - P6)', students: groupS2High },
+        { label: '第二節 (S2) 低年級 (P1 - P3)', students: groupS2Low },
+        { label: '週末專科班 / 面試班 / 特別時段', students: groupSpecial }
+      ];
+
+      const now = new Date();
+      const exportDateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const versionStr = `V${pdfPrintCounts[schedulePollId] || 1}`;
+
+      let html = `<table style="width:100%; border-collapse:collapse; font-size:8.5px; border:1.5px solid #000;">`;
+      
+      // 1. 實體大表頭 (三欄格式)
+      html += `
+        <thead>
+          <tr style="height:22px; font-weight:bold; background:#fff;">
+            <th colspan="3" style="border:1px solid #000; text-align:left; font-size:12px; font-weight:900; padding-left:4px;">
+              ${scheduleActiveMonth}月
+            </th>
+            <th colspan="${daysInMonth}" style="border:1px solid #000; text-align:center; font-size:11px; font-weight:900; letter-spacing:1px;">
+              功輔班 學生上課時間_${exportDateStr}
+            </th>
+            <th colspan="2" style="border:1px solid #000; text-align:center; font-weight:bold;">簽到表</th>
+            <th colspan="2" style="border:1px solid #000; text-align:center; font-weight:900; font-size:11px;">${versionStr}</th>
+          </tr>
+          <tr style="height:18px; font-weight:bold; background:#f4f4f5;">
+            <th style="border:1px solid #000; width:55px;">學員姓名</th>
+            <th style="border:1px solid #000; width:22px;">年級</th>
+            <th style="border:1px solid #000; width:24px;">時段</th>
+      `;
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dateObj = new Date(scheduleActiveYear, scheduleActiveMonth - 1, day);
+        const wDay = weekDayNames[dateObj.getDay()];
+        const isSun = dateObj.getDay() === 0;
+        const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || hkPublicHolidays.includes(dateStr)));
+
+        html += `
+          <th style="border:1px solid #000; ${isClosed ? 'background-color:#D4D4D8 !important;' : ''}">
+            <div style="font-size:8.5px; line-height:1;">${day}</div>
+            <div style="font-size:7.5px; line-height:1;">${wDay}</div>
+          </th>
+        `;
+      }
+
+      html += `
+            <th style="border:1px solid #000; width:22px;">出席</th>
+            <th style="border:1px solid #000; width:22px;">缺席</th>
+            <th style="border:1px solid #000; width:22px;">上月</th>
+            <th style="border:1px solid #000; width:22px;">待補</th>
+          </tr>
+        </thead>
+        <tbody>
+      `;
+
+      // 2. 學生名冊與分組 (純白空白格 vs 唔返學灰底)
+      printGroups.forEach(grp => {
+        if (grp.students.length === 0) return;
+
+        // 分組分隔列 (清晰標明班級)
+        html += `
+          <tr style="height:16px; background-color:#E4E4E7 !important; font-weight:bold;">
+            <td colspan="${daysInMonth + 7}" style="border:1px solid #000; text-align:left; padding-left:6px; font-size:8px;">
+              ● ${grp.label} (${grp.students.length}人)
+            </td>
+          </tr>
+        `;
+
+        grp.students.forEach(st => {
+          const baseSlot = st.timeSlot || 'S1';
+
+          html += `<tr style="height:18px;">`;
+          html += `<td style="border:1px solid #000; font-weight:bold; text-align:center;">${st.studentName}</td>`;
+          html += `<td style="border:1px solid #000; text-align:center;">${st.grade}</td>`;
+          html += `<td style="border:1px solid #000; text-align:center;">${baseSlot}</td>`;
+
+          for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dateObj = new Date(scheduleActiveYear, scheduleActiveMonth - 1, day);
+            const isSun = dateObj.getDay() === 0;
+            const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || hkPublicHolidays.includes(dateStr)));
+            const isRegularSchoolDay = isStudentScheduledOnDate(st, dateStr) && !isClosed;
+
+            const key = `${st.studentId}_${dateStr}`;
+            const currentStatus = attendanceStateMap[key] || (isRegularSchoolDay ? 'SCHEDULED' : 'NONE');
+
+            // 🌟 核心規則：上學日為純白空白格 (print-on-cell)，供導師手寫；不上學/休息/請假為純灰底 (print-off-cell)
+            if (isRegularSchoolDay && currentStatus !== 'CANCELLED') {
+              html += `<td class="print-on-cell" style="border:1px solid #000; background-color:#fff !important;"></td>`;
+            } else {
+              html += `<td class="print-off-cell" style="border:1px solid #000; background-color:#D4D4D8 !important;"></td>`;
+            }
+          }
+
+          // 右側統計欄 (實體留空)
+          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
+          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
+          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
+          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
+          html += `</tr>`;
+        });
+      });
+
+      html += `</tbody></table>`;
+      printContainer.innerHTML = html;
     }
 
     function openStudentCellModal(studentId, dateStr) {
@@ -2347,21 +2464,21 @@
       });
     }
 
-  let pdfPrintCounts = {};
+	let pdfPrintCounts = {};
     function printSchedulePDF() {
       const pollId = schedulePollId;
-      
-      // 1. 每印一次版本號自動 +1
+
+      // 1. 每印一次版本號自動 +1 (V1 -> V2...)
       if (!pdfPrintCounts[pollId]) { 
         pdfPrintCounts[pollId] = 1; 
       } else { 
         pdfPrintCounts[pollId]++; 
       }
-      
-      // 2. 重新渲染簽到表格以即時更新頂部大表頭 (包含最新 Version 與今日日期)
-      renderScheduleGrid();
 
-      // 3. 準備 PDF 存檔名稱 (如 2610_V1)
+      // 2. 獨立組裝實體列印專用表格 (只寫入隱形容器，完全不碰網頁畫面)
+      buildPrintScheduleTable();
+
+      // 3. 準備 PDF 預設檔名 (例如 2610_V1)
       const parts = pollId.split('-');
       const yy = parts.length === 2 ? parts[0].substring(2) : '26';
       const mm = parts.length === 2 ? parts[1] : '10';
