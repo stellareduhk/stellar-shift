@@ -1271,6 +1271,17 @@
       document.getElementById('stFormSlotCustomInput').value = '';
     }
 
+    async function fetchStudentsList() {
+      try {
+        const res = await fetch(`${API_URL}?action=getStudents`);
+        const json = await res.json();
+        if (json.status === 'success') {
+          masterStudentsList = json.data || [];
+          renderStudentList();
+        }
+      } catch (err) { console.error('Fetch students error:', err); }
+    }
+
     function renderStudentList() {
       const container = document.getElementById('studentCardGrid');
       const keyword = document.getElementById('stSearchKeyword').value.trim().toLowerCase();
@@ -1335,92 +1346,22 @@
       return daysStr.split(',').map(d => map[d.trim()] || d).join(', ');
     }
 
-function editStudentMaster(studentId) {
+    function editStudentMaster(studentId) {
       const st = masterStudentsList.find(s => s.studentId === studentId);
       if (!st) return;
 
-      document.getElementById('stFormId').value = st.studentId;
+	  document.getElementById('stFormId').value = st.studentId;
       document.getElementById('stFormName').value = st.studentName || '';
-
-      // 🌟 1. 入學起步日防呆回顯 (確保純淨 YYYY-MM-DD 送入日期選單)
       if (document.getElementById('stFormStartDate')) {
-        let rawStart = (st.startDate || st.enrollmentMonth || '').toString().trim();
-        if (rawStart.includes('T')) rawStart = rawStart.split('T')[0];
-        rawStart = rawStart.replace(/\//g, '-');
-        if (/^\d{1,2}-\d{4}$/.test(rawStart)) {
-          const p = rawStart.split('-');
-          rawStart = `${p[1]}-${p[0].padStart(2, '0')}-01`;
-        }
-        if (rawStart.length >= 10) rawStart = rawStart.substring(0, 10);
-        document.getElementById('stFormStartDate').value = rawStart;
+        document.getElementById('stFormStartDate').value = st.startDate || st.enrollmentMonth || '';
       }
-
-      // 🌟 2. 預約新更表生效日防呆回顯
       if (document.getElementById('stFormChangeEffectiveDate')) {
-        let rawChange = (st.changeEffectiveDate || '').toString().trim();
-        if (rawChange.includes('T')) rawChange = rawChange.split('T')[0];
-        rawChange = rawChange.replace(/\//g, '-');
-        if (rawChange.length >= 10) rawChange = rawChange.substring(0, 10);
-        document.getElementById('stFormChangeEffectiveDate').value = rawChange;
+        document.getElementById('stFormChangeEffectiveDate').value = st.changeEffectiveDate || '';
       }
-
-      // 🌟 3. 新上課日子 Checkbox 精準點亮對位
       const newDays = (st.newDefaultDays || '').split(',').map(d => d.trim());
       document.querySelectorAll('.st-new-day-cb').forEach(cb => {
         cb.checked = newDays.includes(cb.value);
       });
-      
-      if (st.academicYear && st.academicYear.includes('-')) {
-        const parts = st.academicYear.split('-');
-        const parsedStart = parseInt(parts[0], 10);
-        if (!isNaN(parsedStart)) { currentStartYear = parsedStart; }
-      } else { currentStartYear = new Date().getFullYear(); }
-      updateAcademicYearUI();
-
-      document.getElementById('stFormGrade').value = st.grade || 'P1';
-
-      const radios = document.getElementsByName('stCourseType');
-      for (let r of radios) { r.checked = (r.value === (st.courseType || '功課班')); }
-      onCourseTypeChange();
-
-      if (st.courseType === '面試班') {
-        document.getElementById('stFormSlotCustomInput').value = st.timeSlot || '';
-      } else {
-        document.getElementById('stFormSlotSelect').value = st.timeSlot || 'S1';
-      }
-
-      const activeDays = (st.defaultDays || '').split(',').map(d => d.trim());
-      document.querySelectorAll('.st-day-cb').forEach(cb => { cb.checked = activeDays.includes(cb.value); });
-
-      document.getElementById('stFormStatus').value = st.status || 'Active';
-
-      const specDaysStr = st.specialRuleDays || '';
-      const specCfgStr = st.specialRuleConfig || '';
-
-      if (specDaysStr && specDaysStr.includes(':')) {
-        const parts = specDaysStr.split(':');
-        document.getElementById('stFormSpecialSlot').value = parts[0].trim();
-        const daysArr = parts[1].split(',').map(d => d.trim());
-        document.querySelectorAll('.st-spec-day-cb').forEach(cb => {
-          cb.checked = daysArr.includes(cb.value);
-        });
-      } else {
-        document.getElementById('stFormSpecialSlot').value = '';
-        document.querySelectorAll('.st-spec-day-cb').forEach(cb => cb.checked = false);
-      }
-
-      if (specCfgStr && specCfgStr.includes(',')) {
-        const parts = specCfgStr.split(',');
-        document.getElementById('stFormSpecialDeduct').value = parts[0].trim().toUpperCase() || 'YES';
-        document.getElementById('stFormSpecialExtraTutors').value = parts[1].trim() || '1';
-      } else {
-        document.getElementById('stFormSpecialDeduct').value = 'YES';
-        document.getElementById('stFormSpecialExtraTutors').value = '1';
-      }
-
-      document.getElementById('stFormRemarks').value = st.remarks || '';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
       
       if (st.academicYear && st.academicYear.includes('-')) {
         const parts = st.academicYear.split('-');
@@ -1667,36 +1608,20 @@ function editStudentMaster(studentId) {
       }
     }
 
-// 🌟 時空門禁大一統函式 (Stellar OS 變位解碼官：時空對位律・裝甲加固版)
+	// 🌟 時空門禁大一統函式 (Stellar OS 變位解碼官：時空對位律)
     function isStudentScheduledOnDate(st, dateStr) {
       if (!st || !dateStr) return false;
 
-      // 門禁一：入學起步日審查 (雙軌掛載 + 自動格式清洗)
-      let effectiveStart = (st.startDate || st.enrollmentMonth || '').toString().trim();
-      if (effectiveStart.includes('T')) effectiveStart = effectiveStart.split('T')[0];
-      effectiveStart = effectiveStart.replace(/\//g, '-');
-      
-      // 自動相容舊生 MM-YYYY 格式 (例如 12-2025 -> 2025-12-01)
-      if (/^\d{1,2}-\d{4}$/.test(effectiveStart)) {
-        const p = effectiveStart.split('-');
-        effectiveStart = `${p[1]}-${p[0].padStart(2, '0')}-01`;
-      }
-      if (effectiveStart.length >= 10) effectiveStart = effectiveStart.substring(0, 10);
-
-      // 嚴格阻斷：未到開學起步日直接判定不上課
+      // 門禁一：入學起步日審查 (未到開學日直接阻斷，判定不上課)
+      const effectiveStart = st.startDate || '';
       if (effectiveStart && effectiveStart.length === 10 && dateStr < effectiveStart) {
         return false;
       }
 
-      // 門禁二：時空更表分流 (新更表生效審查 + 格式清洗)
+      // 門禁二：時空更表分流 (判斷是否已達新更表生效日期)
       let activeDaysStr = st.defaultDays || '';
-      let effectiveChange = (st.changeEffectiveDate || '').toString().trim();
-      if (effectiveChange.includes('T')) effectiveChange = effectiveChange.split('T')[0];
-      effectiveChange = effectiveChange.replace(/\//g, '-');
-      if (effectiveChange.length >= 10) effectiveChange = effectiveChange.substring(0, 10);
-
-      if (effectiveChange && effectiveChange.length === 10 && st.newDefaultDays) {
-        if (dateStr >= effectiveChange) {
+      if (st.changeEffectiveDate && st.changeEffectiveDate.length === 10 && st.newDefaultDays) {
+        if (dateStr >= st.changeEffectiveDate) {
           activeDaysStr = st.newDefaultDays;
         }
       }
@@ -3745,8 +3670,8 @@ function updateOMUIState() {
           if (demandRes && demandRes.status === 'success') {
             dailyDemandList = demandRes.data || [];
           }
-     	  if (stRes && stRes.status === 'success') {
-            masterStudentsList = (stRes.data || []).map(sanitizeStudentData);
+          if (stRes && stRes.status === 'success') {
+            masterStudentsList = stRes.data || [];
           }
           if (matrixRes && matrixRes.status === 'success') {
             tutorRatioMatrixList = matrixRes.data || [];
