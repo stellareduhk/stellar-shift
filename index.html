@@ -2147,7 +2147,7 @@
       container.innerHTML = tableHtml;
     }
 
-    // 🌟 軌道 B：實體紙本專屬印製引擎 (完全對位 2610學生.JPG：有大表頭、分組清楚、要返學＝純白空白格仔、唔返學＝全灰底、保證 1 頁橫向 A4)
+	// 🌟 軌道 B：實體紙本專屬印製引擎 (包含 8132 底部統計行・純白留空・不上學灰底・保證 1 頁橫向 A4)
     function buildPrintScheduleTable() {
       const printContainer = document.getElementById('stellarPrintContainer');
       if (!printContainer) return;
@@ -2200,6 +2200,16 @@
       const exportDateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
       const versionStr = `V${pdfPrintCounts[schedulePollId] || 1}`;
 
+      // 🌟 初始化每日統計計數器 (用於計算 8132 底部數據)
+      const dailyS1HighCount = new Array(daysInMonth + 1).fill(0);
+      const dailyS1LowCount = new Array(daysInMonth + 1).fill(0);
+      const dailyS2HighCount = new Array(daysInMonth + 1).fill(0);
+      const dailyS2LowCount = new Array(daysInMonth + 1).fill(0);
+      const dailyS1SpecialTutors = new Array(daysInMonth + 1).fill(0);
+      const dailyS1DeductStudents = new Array(daysInMonth + 1).fill(0);
+      const dailyS2SpecialTutors = new Array(daysInMonth + 1).fill(0);
+      const dailyS2DeductStudents = new Array(daysInMonth + 1).fill(0);
+
       let html = `<table style="width:100%; border-collapse:collapse; font-size:8.5px; border:1.5px solid #000;">`;
       
       // 1. 實體大表頭 (三欄格式)
@@ -2246,11 +2256,10 @@
         <tbody>
       `;
 
-      // 2. 學生名冊與分組 (純白空白格 vs 唔返學灰底)
+      // 2. 學生名冊與分組 (純白空白格 vs 唔返學灰底，同時累計人數)
       printGroups.forEach(grp => {
         if (grp.students.length === 0) return;
 
-        // 分組分隔列 (清晰標明班級)
         html += `
           <tr style="height:16px; background-color:#E4E4E7 !important; font-weight:bold;">
             <td colspan="${daysInMonth + 7}" style="border:1px solid #000; text-align:left; padding-left:6px; font-size:8px;">
@@ -2261,8 +2270,9 @@
 
         grp.students.forEach(st => {
           const baseSlot = st.timeSlot || 'S1';
+          const isHigh = isHighGrade(st.grade);
 
-          html += `<tr style="height:18px;">`;
+          html += `<tr style="height:17px;">`;
           html += `<td style="border:1px solid #000; font-weight:bold; text-align:center;">${st.studentName}</td>`;
           html += `<td style="border:1px solid #000; text-align:center;">${st.grade}</td>`;
           html += `<td style="border:1px solid #000; text-align:center;">${baseSlot}</td>`;
@@ -2270,14 +2280,53 @@
           for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const dateObj = new Date(scheduleActiveYear, scheduleActiveMonth - 1, day);
+            let dayOfWeekIso = dateObj.getDay();
+            if (dayOfWeekIso === 0) dayOfWeekIso = 7;
+
             const isSun = dateObj.getDay() === 0;
             const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || hkPublicHolidays.includes(dateStr)));
             const isRegularSchoolDay = isStudentScheduledOnDate(st, dateStr) && !isClosed;
 
             const key = `${st.studentId}_${dateStr}`;
             const currentStatus = attendanceStateMap[key] || (isRegularSchoolDay ? 'SCHEDULED' : 'NONE');
+            const slotOverride = attendanceSlotOverrideMap[key] || '';
+            const effectiveSlot = slotOverride || baseSlot;
 
-            // 🌟 核心規則：上學日為純白空白格 (print-on-cell)，供導師手寫；不上學/休息/請假為純灰底 (print-off-cell)
+            const isAttending = ['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT', 'SCHEDULED'].includes(currentStatus);
+
+            // 累計每日出勤數據
+            if (isAttending && !isClosed) {
+              if (effectiveSlot === 'S1') {
+                if (isHigh) dailyS1HighCount[day]++;
+                else dailyS1LowCount[day]++;
+              } else if (effectiveSlot === 'S2') {
+                if (isHigh) dailyS2HighCount[day]++;
+                else dailyS2LowCount[day]++;
+              }
+
+              if (st.specialRuleDays && st.specialRuleConfig) {
+                const ruleParts = st.specialRuleDays.split(':');
+                if (ruleParts.length === 2) {
+                  const ruleSlot = ruleParts[0].trim();
+                  const ruleDays = ruleParts[1].split(',').map(d => parseInt(d.trim(), 10));
+
+                  if (effectiveSlot === ruleSlot && ruleDays.includes(dayOfWeekIso)) {
+                    const cfgParts = st.specialRuleConfig.split(',');
+                    const isDeduct = cfgParts[0] && cfgParts[0].trim().toUpperCase() === 'YES';
+                    const extraTutors = cfgParts[1] ? (parseInt(cfgParts[1].trim(), 10) || 0) : 0;
+
+                    if (effectiveSlot === 'S1') {
+                      if (isDeduct) dailyS1DeductStudents[day]++;
+                      dailyS1SpecialTutors[day] += extraTutors;
+                    } else if (effectiveSlot === 'S2') {
+                      if (isDeduct) dailyS2DeductStudents[day]++;
+                      dailyS2SpecialTutors[day] += extraTutors;
+                    }
+                  }
+                }
+              }
+            }
+
             if (isRegularSchoolDay && currentStatus !== 'CANCELLED') {
               html += `<td class="print-on-cell" style="border:1px solid #000; background-color:#fff !important;"></td>`;
             } else {
@@ -2285,7 +2334,7 @@
             }
           }
 
-          // 右側統計欄 (實體留空)
+          // 右側統計欄實體留空
           html += `<td style="border:1px solid #000; background:#fff;"></td>`;
           html += `<td style="border:1px solid #000; background:#fff;"></td>`;
           html += `<td style="border:1px solid #000; background:#fff;"></td>`;
@@ -2293,6 +2342,44 @@
           html += `</tr>`;
         });
       });
+
+      // 🌟 3. 實裝 8132 底部統計行 1：第一節 (S1) 學生總人數 (高/低)
+      html += `<tr style="height:17px; font-weight:bold; background:#fff;">`;
+      html += `<td colspan="3" style="border:1px solid #000; text-align:left; padding-left:4px; font-size:7.5px;">第一節 (S1) 學生總人數 (高/低)</td>`;
+      for (let day = 1; day <= daysInMonth; day++) {
+        const totalS1 = dailyS1HighCount[day] + dailyS1LowCount[day];
+        html += `<td style="border:1px solid #000; text-align:center; font-size:8px;">${totalS1}</td>`;
+      }
+      html += `<td colspan="4" style="border:1px solid #000; background:#fff;"></td></tr>`;
+
+      // 🌟 4. 實裝 8132 底部統計行 2：第二節 (S2) 學生總人數 (高/低)
+      html += `<tr style="height:17px; font-weight:bold; background:#fff;">`;
+      html += `<td colspan="3" style="border:1px solid #000; text-align:left; padding-left:4px; font-size:7.5px;">第二節 (S2) 學生總人數 (高/低)</td>`;
+      for (let day = 1; day <= daysInMonth; day++) {
+        const totalS2 = dailyS2HighCount[day] + dailyS2LowCount[day];
+        html += `<td style="border:1px solid #000; text-align:center; font-size:8px;">${totalS2}</td>`;
+      }
+      html += `<td colspan="4" style="border:1px solid #000; background:#fff;"></td></tr>`;
+
+      // 🌟 5. 實裝 8132 底部統計行 3：對應人手標籤 (S1/S2 導師數)
+      html += `<tr style="height:17px; font-weight:bold; background:#fff;">`;
+      html += `<td colspan="3" style="border:1px solid #000; text-align:left; padding-left:4px; font-size:7.5px;">對應人手標籤 (S1/S2 導師數)</td>`;
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dateObj = new Date(scheduleActiveYear, scheduleActiveMonth - 1, day);
+        const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (dateObj.getDay() === 0 || hkPublicHolidays.includes(dateStr)));
+
+        if (isClosed) {
+          html += `<td style="border:1px solid #000; text-align:center; font-size:7.5px; color:#666;">0/0</td>`;
+        } else {
+          const totalS1 = dailyS1HighCount[day] + dailyS1LowCount[day];
+          const totalS2 = dailyS2HighCount[day] + dailyS2LowCount[day];
+          const s1Ratio = calculateTutorRatio(scheduleActiveMonth, totalS1, dailyS1SpecialTutors[day], dailyS1DeductStudents[day]);
+          const s2Ratio = calculateTutorRatio(scheduleActiveMonth, totalS2, dailyS2SpecialTutors[day], dailyS2DeductStudents[day]);
+          html += `<td style="border:1px solid #000; text-align:center; font-size:7.5px;">${s1Ratio.text}/${s2Ratio.text}</td>`;
+        }
+      }
+      html += `<td colspan="4" style="border:1px solid #000; background:#fff;"></td></tr>`;
 
       html += `</tbody></table>`;
       printContainer.innerHTML = html;
