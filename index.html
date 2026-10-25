@@ -842,7 +842,7 @@
           <span class="text-slate-400 italic">💡 點擊任何單格可開啟手動調更彈窗；點擊灰色非上課格可安排補堂！</span>
         </div>
 
-        <div id="printableScheduleArea" class="overflow-x-auto custom-scrollbar bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+        <div id="printableScheduleArea" class="overflow-auto max-h-[70vh] custom-scrollbar bg-slate-900/80 p-3 rounded-xl border border-slate-800">
           <div id="scheduleTableContainer">
             <p class="text-xs text-slate-500 text-center py-8">載入學生簽到矩陣中...</p>
           </div>
@@ -1937,11 +1937,11 @@
         { title: '🟣 週末專科班 / 面試班 / 特別時段', students: groupSpecial, bgClass: 'bg-purple-950/40 text-purple-300' }
       ];
 
-      let tableHtml = `<table class="w-full text-left text-xs border-collapse border border-slate-700">`;
-      tableHtml += `<thead class="bg-slate-950 text-amber-400"><tr>`;
-      tableHtml += `<th class="p-2 border border-slate-700 min-w-[120px] sticky left-0 bg-slate-950 z-10">學員姓名</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[35px]">年級</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[45px]">時段</th>`;
+	  let tableHtml = `<table class="w-full text-left text-xs border-collapse border border-slate-700">`;
+      tableHtml += `<thead class="bg-slate-950 text-amber-400 sticky top-0 z-20"><tr>`;
+      tableHtml += `<th class="p-2 border border-slate-700 min-w-[120px] sticky left-0 top-0 bg-slate-950 z-30 shadow-md">學員姓名</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[35px] sticky top-0 bg-slate-950 z-20">年級</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[45px] sticky top-0 bg-slate-950 z-20">時段</th>`;
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${scheduleActiveYear}-${String(scheduleActiveMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -1951,18 +1951,21 @@
         const isHkHol = hkPublicHolidays.includes(dateStr);
         const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || isHkHol));
 
+        const thBg = isClosed ? 'bg-red-950/80 text-red-400' : 'bg-slate-950 text-slate-200';
+        const subColor = isClosed ? 'text-red-400/80' : 'text-slate-400';
+
         tableHtml += `
-          <th class="p-1 border border-slate-700 text-center min-w-[32px] ${isClosed ? 'bg-red-950/40 text-red-400' : ''}">
-            <div>${day}</div>
-            <div class="text-[9px] font-normal">${wDay}</div>
+          <th class="p-1 border border-slate-700 text-center min-w-[32px] sticky top-0 z-20 shadow-sm ${thBg}">
+            <div class="font-bold text-xs">${day}</div>
+            <div class="text-[9px] font-normal ${subColor}">${wDay}</div>
           </th>
         `;
       }
 
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-emerald-400">出席</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-red-400">缺席</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-sky-400">上月</th>`;
-      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] text-purple-300">待補</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] sticky top-0 bg-slate-950 z-20 text-emerald-400">出席</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] sticky top-0 bg-slate-950 z-20 text-red-400">缺席</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] sticky top-0 bg-slate-950 z-20 text-sky-400">上月</th>`;
+      tableHtml += `<th class="p-1 border border-slate-700 text-center min-w-[38px] sticky top-0 bg-slate-950 z-20 text-purple-300">待補</th>`;
       tableHtml += `</tr></thead><tbody>`;
 
       const dailyS1HighCount = new Array(daysInMonth + 1).fill(0);
@@ -3842,7 +3845,7 @@
       customAlert(html);
     }
 
-	function renderMatrixTable(year, month) {
+		function renderMatrixTable(year, month) {
       const table = document.getElementById('matrixTable');
       const daysInMonth = new Date(year, month, 0).getDate();
 
@@ -3861,16 +3864,17 @@
         return;
       }
 
-      // 🌟 1. 抓取休息日與香港公眾假期設定 (與學生管理系統 100% 相同)
+      // 🌟 1. 預先快取休息日與香港公眾假期 (精準對位紅日直欄)
       const setting = allSettingsList.find(s => s.pollId === currentPollId);
       const closedDates = setting && setting.closedDates ? setting.closedDates.split(',').filter(Boolean) : [];
       const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
+      const closedDaysMap = {};
 
       // 🌟 2. 十字二維定錨：左上角雙向凍結 (z-30)
       let headerHtml = `<thead class="sticky top-0 z-20"><tr>`;
       headerHtml += `<th class="p-2 border border-slate-700 min-w-[170px] sticky left-0 top-0 bg-slate-950 text-amber-400 z-30 shadow-md">導師編號 & 姓名</th>`;
 
-      // 🌟 3. 學生簽到表標準日期格式 (純數字 + 星期幾 + 紅日自動標色)
+      // 🌟 3. 表頭生成 (對位學生簽到表純數字格式 + 記錄紅日)
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const dateObj = new Date(year, month - 1, day);
@@ -3878,14 +3882,15 @@
         const isSun = dateObj.getDay() === 0;
         const isHkHol = hkPublicHolidays.includes(dateStr);
         const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || isHkHol));
+        closedDaysMap[day] = isClosed;
 
-        const thBgText = isClosed ? 'bg-red-950/80 text-red-400' : 'bg-slate-900/95 text-slate-200';
-        const subTextColor = isClosed ? 'text-red-400/80' : 'text-slate-400';
+        const thBg = isClosed ? 'bg-red-950/80 text-red-400' : 'bg-slate-900/95 text-slate-200';
+        const subColor = isClosed ? 'text-red-400/80' : 'text-slate-400';
 
         headerHtml += `
-          <th class="p-1 border border-slate-700 text-center min-w-[42px] sticky top-0 z-20 shadow-sm ${thBgText}">
+          <th class="p-1 border border-slate-700 text-center min-w-[42px] sticky top-0 z-20 shadow-sm ${thBg}">
             <div class="font-bold text-xs">${day}</div>
-            <div class="text-[9px] font-normal ${subTextColor}">${wDay}</div>
+            <div class="text-[9px] font-normal ${subColor}">${wDay}</div>
           </th>
         `;
       }
@@ -3895,7 +3900,7 @@
       tutorIds.forEach(tid => {
         const tname = matrixTutorsMap[tid];
         bodyHtml += `<tr class="hover:bg-slate-800/60 transition">`;
-        // 🌟 十字二維定錨：左側導師姓名與複製按鈕橫向凍結 (z-10)
+        // 🌟 十字二維定錨：左側導師姓名與按鈕橫向凍結 (z-10)
         bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-slate-200 bg-slate-900 sticky left-0 z-10 min-w-[170px] shadow-sm">
           <div class="flex items-center justify-between gap-1.5">
             <span class="truncate text-xs">${tid}${tname !== tid ? ' - ' + tname : ''}</span>
@@ -3906,35 +3911,49 @@
         for (let day = 1; day <= daysInMonth; day++) {
           const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const rec = adminRecords.find(r => formatTutorId(r.tutorId) === tid && r.date === dateStr);
+          const isDayClosed = closedDaysMap[day];
 
           if (rec) {
             const meta = parseRecordMeta(rec);
             let slotText = meta.approvedSlots.length > 0 ? meta.approvedSlots.join(', ') : (rec.timeSlot === '不派更' ? '—' : rec.timeSlot);
             if (slotText === '不派更') slotText = '—';
 
-            const cellClass = meta.isDutyOM === 'YES' ? 'duty-om-matrix-cell' : 'bg-amber-400/10 text-amber-300';
-            bodyHtml += `<td class="p-1 border border-slate-700 text-center ${cellClass} font-semibold text-[10px]">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}</td>`;
+            let cellClass = '';
+            if (meta.isDutyOM === 'YES') {
+              cellClass = 'duty-om-matrix-cell';
+            } else if (meta.approvedSlots.length > 0) {
+              cellClass = isDayClosed ? 'bg-red-950/40 text-amber-300 font-bold' : 'bg-amber-400/10 text-amber-300 font-bold';
+            } else {
+              // 🌟 休息日成行通紅：未排班格帶紅底
+              cellClass = isDayClosed ? 'bg-red-950/25 text-red-900/50' : 'text-slate-700';
+            }
+
+            bodyHtml += `<td class="p-1 border border-slate-700 text-center ${cellClass} text-[10px]">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}</td>`;
           } else {
-            bodyHtml += `<td class="p-1 border border-slate-700 text-center text-slate-700">—</td>`;
+            // 🌟 休息日成行通紅：完全無報更格整排紅底
+            const emptyCellClass = isDayClosed ? 'bg-red-950/25 text-red-900/50' : 'text-slate-700';
+            bodyHtml += `<td class="p-1 border border-slate-700 text-center ${emptyCellClass}">—</td>`;
           }
         }
         bodyHtml += `</tr>`;
       });
 
-      // 🌟 算力大一統：矩陣圖目標人手需求行 (左側標題凍結 z-10)
+      // 🌟 算力大一統：矩陣圖目標人手需求行 (紅日對位透紅)
       bodyHtml += `<tr class="bg-slate-900 border-t-2 border-amber-400/50">`;
-      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-amber-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10">🎯 目標人手需求 (S1/S2)：</td>`;
+      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-amber-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10 shadow-sm">🎯 目標人手需求 (S1/S2)：</td>`;
       for(let day=1; day<=daysInMonth; day++) {
          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
          const demandInfo = getDynamicDemandForDate(dateStr);
+         const isDayClosed = closedDaysMap[day];
          let label = !demandInfo.isClosed && demandInfo.label !== '0/0' ? demandInfo.label : '-';
-         bodyHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-amber-300 text-[10px]">${label}</td>`;
+         const cellBg = isDayClosed ? 'bg-red-950/30 text-red-400/50' : 'text-amber-300';
+         bodyHtml += `<td class="p-1 border border-slate-700 text-center font-bold text-[10px] ${cellBg}">${label}</td>`;
       }
       bodyHtml += `</tr>`;
 
-      // 🌟 算力大一統：矩陣圖當前獲批估算行 (左側標題凍結 z-10)
+      // 🌟 算力大一統：矩陣圖當前獲批估算行 (紅日對位透紅)
       bodyHtml += `<tr class="bg-slate-900">`;
-      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-emerald-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10">✅ 當前獲批估算 (S1/S2)：</td>`;
+      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-emerald-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10 shadow-sm">✅ 當前獲批估算 (S1/S2)：</td>`;
       for(let day=1; day<=daysInMonth; day++) {
          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
          const dayRecs = adminRecords.filter(r => r.date === dateStr);
@@ -3946,11 +3965,12 @@
          });
 
          const demandInfo = getDynamicDemandForDate(dateStr);
+         const isDayClosed = closedDaysMap[day];
          let s1Need = demandInfo.s1Need;
          let s2Need = demandInfo.s2Need;
 
          let isShort = (s1Need > 0 && s1App < s1Need) || (s2Need > 0 && s2App < s2Need);
-         let cellClass = isShort ? 'alert-pulse-red text-white' : 'text-emerald-300';
+         let cellClass = isShort ? 'alert-pulse-red text-white' : (isDayClosed ? 'bg-red-950/30 text-red-400/50' : 'text-emerald-300');
          let label = (s1Need===0 && s2Need===0) ? '-' : `${s1App}/${s2App}`;
 
          bodyHtml += `<td class="p-1 border border-slate-700 text-center font-bold ${cellClass} text-[10px]">${label}</td>`;
