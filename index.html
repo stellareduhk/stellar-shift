@@ -256,7 +256,7 @@
       </h3>
       <span class="text-xs text-slate-400">點擊導師名字旁「📋 複製更表」即時發送 WhatsApp 通知</span>
     </div>
-    <div class="overflow-x-auto custom-scrollbar">
+    <div class="overflow-auto max-h-[75vh] custom-scrollbar">
       <table id="matrixTable" class="w-full text-left text-xs border-collapse">
       </table>
     </div>
@@ -3861,18 +3861,31 @@
         return;
       }
 
+      // 🌟 1. 抓取休息日與香港公眾假期設定 (與學生管理系統 100% 相同)
+      const setting = allSettingsList.find(s => s.pollId === currentPollId);
+      const closedDates = setting && setting.closedDates ? setting.closedDates.split(',').filter(Boolean) : [];
       const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
 
-      // 🌟 十字二維定錨：表頭頂部凍結 (z-20) ＋ 左上角雙重凍結 (z-30)
-      let headerHtml = `<thead class="bg-slate-950 text-amber-400 sticky top-0 z-20"><tr>`;
-      headerHtml += `<th class="p-2 border border-slate-700 min-w-[170px] sticky left-0 top-0 bg-slate-950 z-30 shadow-md">導師編號 & 姓名</th>`;
+      // 🌟 2. 十字二維定錨：左上角雙向凍結 (z-30)
+      let headerHtml = `<thead class="sticky top-0 z-20"><tr>`;
+      headerHtml += `<th class="p-2 border border-slate-700 min-w-[170px] sticky left-0 top-0 bg-slate-950 text-amber-400 z-30 shadow-md">導師編號 & 姓名</th>`;
+
+      // 🌟 3. 學生簽到表標準日期格式 (純數字 + 星期幾 + 紅日自動標色)
       for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const dateObj = new Date(year, month - 1, day);
         const wDay = weekDayNames[dateObj.getDay()];
+        const isSun = dateObj.getDay() === 0;
+        const isHkHol = hkPublicHolidays.includes(dateStr);
+        const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || isHkHol));
+
+        const thBgText = isClosed ? 'bg-red-950/80 text-red-400' : 'bg-slate-900/95 text-slate-200';
+        const subTextColor = isClosed ? 'text-red-400/80' : 'text-slate-400';
+
         headerHtml += `
-          <th class="p-1 border border-slate-700 text-center min-w-[48px] bg-slate-900/95">
-            <div>${day}日</div>
-            <div class="text-[9px] font-normal text-slate-400">${wDay}</div>
+          <th class="p-1 border border-slate-700 text-center min-w-[42px] sticky top-0 z-20 shadow-sm ${thBgText}">
+            <div class="font-bold text-xs">${day}</div>
+            <div class="text-[9px] font-normal ${subTextColor}">${wDay}</div>
           </th>
         `;
       }
@@ -3882,7 +3895,7 @@
       tutorIds.forEach(tid => {
         const tname = matrixTutorsMap[tid];
         bodyHtml += `<tr class="hover:bg-slate-800/60 transition">`;
-        // 🌟 十字二維定錨：左側導師姓名與按鈕橫向凍結 (z-10, 不透明底色)
+        // 🌟 十字二維定錨：左側導師姓名與複製按鈕橫向凍結 (z-10)
         bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-slate-200 bg-slate-900 sticky left-0 z-10 min-w-[170px] shadow-sm">
           <div class="flex items-center justify-between gap-1.5">
             <span class="truncate text-xs">${tid}${tname !== tid ? ' - ' + tname : ''}</span>
@@ -3908,7 +3921,7 @@
         bodyHtml += `</tr>`;
       });
 
-      // 🌟 算力大一統：矩陣圖目標人手需求行 (左欄凍結)
+      // 🌟 算力大一統：矩陣圖目標人手需求行 (左側標題凍結 z-10)
       bodyHtml += `<tr class="bg-slate-900 border-t-2 border-amber-400/50">`;
       bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-amber-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10">🎯 目標人手需求 (S1/S2)：</td>`;
       for(let day=1; day<=daysInMonth; day++) {
@@ -3919,7 +3932,7 @@
       }
       bodyHtml += `</tr>`;
 
-      // 🌟 算力大一統：矩陣圖當前獲批估算行 (左欄凍結)
+      // 🌟 算力大一統：矩陣圖當前獲批估算行 (左側標題凍結 z-10)
       bodyHtml += `<tr class="bg-slate-900">`;
       bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-emerald-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10">✅ 當前獲批估算 (S1/S2)：</td>`;
       for(let day=1; day<=daysInMonth; day++) {
