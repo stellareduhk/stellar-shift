@@ -158,9 +158,9 @@
       <!-- 🌟 OM 專用按鈕 (閹割版點名) -->
       <button id="btnOMAttendance" onclick="handleOpenOMAttendanceAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow hover:bg-emerald-500">📝 學生點名</button>
 
-      <!-- 🌟 OM & Commander 專用按鈕 -->
+	  <!-- 🌟 OM & Commander 專用按鈕 -->
       <button id="btnViewMatrix" onclick="switchView('matrix')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900">📊 樞紐矩陣總表</button>
-      <button id="btnAdminApproval" onclick="handleOpenApprovalModalAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-900/80 text-emerald-200 border border-emerald-500 hover:bg-emerald-800">✅ 報更審核</button>
+      <button id="btnKitchenMode" onclick="handleOpenApprovalModalAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]">🚀 編更作戰中樞</button>
       <button id="btnAdminSetup" onclick="handleOpenAdminSetupAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-purple-200 border border-purple-500 hover:bg-purple-800">⚙️ 報更設定</button>
       
       <!-- 🌟 簡化單一登入按鈕 -->
@@ -2590,16 +2590,16 @@
       }, 150);
     }
 
-<!-- === Part 4/4：【核心運算與三重紅色警示網 (Core Logic & Red Alert Net)】 === -->
+	// === Part 4/4：【核心運算與三重紅色警示網 (Core Logic & Red Alert Net)】 ===
 
-function updateOMUIState() {
+	function updateOMUIState() {
       const role = localStorage.getItem('stellar_role') || '';
       const isCommander = role === 'commander';
       const isOM = role === 'om' || isCommander;
 
       const btnAdmin = document.getElementById('btnAdminSetup');
       const btnMatrix = document.getElementById('btnViewMatrix');
-      const btnApproval = document.getElementById('btnAdminApproval');
+      const btnKitchen = document.getElementById('btnKitchenMode');
       
       const btnStudent = document.getElementById('btnStudentControlPanel'); // 大元帥完整系統
       const btnOMAttend = document.getElementById('btnOMAttendance');       // OM 專屬點名按鈕
@@ -2619,7 +2619,7 @@ function updateOMUIState() {
         // 共通管理員模式：顯示管理按鈕，隱藏登入按鈕
         if (btnAdmin) btnAdmin.style.display = 'inline-block';
         if (btnMatrix) btnMatrix.style.display = 'inline-block';
-        if (btnApproval) btnApproval.style.display = 'inline-block';
+        if (btnKitchen) btnKitchen.style.display = 'inline-block';
         if (btnLogout) btnLogout.style.display = 'inline-block';
         if (btnLogin) btnLogin.style.display = 'none';
         
@@ -2649,7 +2649,7 @@ function updateOMUIState() {
         // 訪客/導師模式：隱藏所有管理按鈕，顯示登入按鈕
         if (btnAdmin) btnAdmin.style.display = 'none';
         if (btnMatrix) btnMatrix.style.display = 'none';
-        if (btnApproval) btnApproval.style.display = 'none';
+        if (btnKitchen) btnKitchen.style.display = 'none';
         if (btnStudent) btnStudent.style.display = 'none';
         if (btnOMAttend) btnOMAttend.style.display = 'none';
         if (btnMonthSetup) btnMonthSetup.style.display = 'none';
@@ -3842,7 +3842,7 @@ function updateOMUIState() {
       customAlert(html);
     }
 
-    function renderMatrixTable(year, month) {
+	function renderMatrixTable(year, month) {
       const table = document.getElementById('matrixTable');
       const daysInMonth = new Date(year, month, 0).getDate();
 
@@ -3861,10 +3861,20 @@ function updateOMUIState() {
         return;
       }
 
-      let headerHtml = `<thead class="bg-slate-900/90 text-amber-400 sticky top-0"><tr>`;
-      headerHtml += `<th class="p-2 border border-slate-700 min-w-[170px]">導師編號 & 姓名</th>`;
+      const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
+
+      // 🌟 十字二維定錨：表頭頂部凍結 (z-20) ＋ 左上角雙重凍結 (z-30)
+      let headerHtml = `<thead class="bg-slate-950 text-amber-400 sticky top-0 z-20"><tr>`;
+      headerHtml += `<th class="p-2 border border-slate-700 min-w-[170px] sticky left-0 top-0 bg-slate-950 z-30 shadow-md">導師編號 & 姓名</th>`;
       for (let day = 1; day <= daysInMonth; day++) {
-        headerHtml += `<th class="p-2 border border-slate-700 text-center min-w-[50px]">${day}日</th>`;
+        const dateObj = new Date(year, month - 1, day);
+        const wDay = weekDayNames[dateObj.getDay()];
+        headerHtml += `
+          <th class="p-1 border border-slate-700 text-center min-w-[48px] bg-slate-900/95">
+            <div>${day}日</div>
+            <div class="text-[9px] font-normal text-slate-400">${wDay}</div>
+          </th>
+        `;
       }
       headerHtml += `</tr></thead>`;
 
@@ -3872,7 +3882,8 @@ function updateOMUIState() {
       tutorIds.forEach(tid => {
         const tname = matrixTutorsMap[tid];
         bodyHtml += `<tr class="hover:bg-slate-800/60 transition">`;
-        bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-slate-200 bg-slate-900/40 min-w-[170px]">
+        // 🌟 十字二維定錨：左側導師姓名與按鈕橫向凍結 (z-10, 不透明底色)
+        bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-slate-200 bg-slate-900 sticky left-0 z-10 min-w-[170px] shadow-sm">
           <div class="flex items-center justify-between gap-1.5">
             <span class="truncate text-xs">${tid}${tname !== tid ? ' - ' + tname : ''}</span>
             <button onclick="copyTutorWhatsAppSchedule('${tid}')" type="button" class="bg-amber-400/20 text-amber-300 hover:bg-amber-400 hover:text-slate-900 border border-amber-400/40 px-2 py-0.5 rounded text-[10px] font-bold transition flex-shrink-0">📋 複製更表</button>
@@ -3897,9 +3908,9 @@ function updateOMUIState() {
         bodyHtml += `</tr>`;
       });
 
-   // 🌟 算力大一統：矩陣圖目標人手需求行
+      // 🌟 算力大一統：矩陣圖目標人手需求行 (左欄凍結)
       bodyHtml += `<tr class="bg-slate-900 border-t-2 border-amber-400/50">`;
-      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-amber-400 text-right text-[10px]">🎯 目標人手需求 (S1/S2)：</td>`;
+      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-amber-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10">🎯 目標人手需求 (S1/S2)：</td>`;
       for(let day=1; day<=daysInMonth; day++) {
          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
          const demandInfo = getDynamicDemandForDate(dateStr);
@@ -3908,9 +3919,9 @@ function updateOMUIState() {
       }
       bodyHtml += `</tr>`;
 
-      // 🌟 算力大一統：矩陣圖當前獲批估算行
+      // 🌟 算力大一統：矩陣圖當前獲批估算行 (左欄凍結)
       bodyHtml += `<tr class="bg-slate-900">`;
-      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-emerald-400 text-right text-[10px]">✅ 當前獲批估算 (S1/S2)：</td>`;
+      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-emerald-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10">✅ 當前獲批估算 (S1/S2)：</td>`;
       for(let day=1; day<=daysInMonth; day++) {
          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
          const dayRecs = adminRecords.filter(r => r.date === dateStr);
