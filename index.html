@@ -359,9 +359,11 @@
             </div>
             <div>
               <label class="text-xs text-amber-400 font-bold block mb-1">📌 當前報更階段</label>
-              <select id="setupStatus" onchange="updateAutoTitle()" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-white focus:border-amber-400">
+			  <select id="setupStatus" onchange="updateAutoTitle()" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-white focus:border-amber-400">
                 <option value="Stage1">🟡 第一階段：OM 優先報更</option>
                 <option value="Stage2">🟢 第二階段：全體導師開放</option>
+                <option value="Drafting">🔵 編更中 (僅限 OM 查閱原報)</option>
+                <option value="Published">🟣 更表已正式發布</option>
                 <option value="Closed">🔴 關閉 / 停止報更</option>
               </select>
             </div>
@@ -1061,65 +1063,84 @@
 
       const rejectedSlots = rejectedSlotsStr ? rejectedSlotsStr.split(', ').map(s=>s.trim()).filter(Boolean) : [];
 
+	  // 🌟 核心防窺探力場：如果是公海視角 (非 OM/Commander)，且處於 Drafting，強制屏蔽已批結果！
+      const role = localStorage.getItem('stellar_role') || '';
+      const isAuth = role === 'om' || role === 'commander';
+      const isDrafting = pollStageStatus === 'Drafting';
+      
       let approvedSlotsStr = '';
-      if (r.approvedSlots) {
-        approvedSlotsStr = r.approvedSlots;
-      } else if (isReviewed) {
-        if (r.timeSlot && r.timeSlot !== '不派更' && r.timeSlot !== '休') {
-          approvedSlotsStr = r.timeSlot;
-        }
+      
+      if (!isAuth && isDrafting) {
+        // 🔒 公海防窺探模式：只准顯化導師的原報，絕不洩漏任何草稿排更數據
+        approvedSlotsStr = ''; 
       } else {
-        approvedSlotsStr = originalSlots.join(', ');
+        // 🔓 解鎖模式：顯示真實審核結果
+        if (r.approvedSlots) {
+          approvedSlotsStr = r.approvedSlots;
+        } else if (isReviewed) {
+          if (r.timeSlot && r.timeSlot !== '不派更' && r.timeSlot !== '休') {
+            approvedSlotsStr = r.timeSlot;
+          }
+        } else {
+          approvedSlotsStr = originalSlots.join(', ');
+        }
       }
-
       const approvedSlots = approvedSlotsStr ? approvedSlotsStr.split(', ').map(s=>s.trim()).filter(Boolean) : [];
 
       return { tid, name, isReviewed, originalSlotsStr, originalSlots, approvedSlots, rejectedSlots, timeSlot: r.timeSlot || '', isDutyOM };
     }
 
-    function switchView(view) {
+	function switchView(view) {
       currentView = view;
       const btnCal = document.getElementById('btnViewCalendar');
       const btnMat = document.getElementById('btnViewMatrix');
       const btnEdit = document.getElementById('btnEditMode');
+      const btnKitchen = document.getElementById('btnKitchenMode'); // 🌟 抓取新的編更按鈕
       
       const calContainer = document.getElementById('viewCalendarContainer');
       const matContainer = document.getElementById('viewMatrixContainer');
       const editInputs = document.getElementById('editInputs');
       const queryContainer = document.getElementById('queryContainer');
 
-      btnCal.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-600 hover:border-amber-400';
-      btnEdit.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-600 hover:border-amber-400';
-      if (btnMat) {
-        btnMat.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900';
-      }
+      // 1. 初始化所有按鈕為暗色狀態
+      if (btnCal) btnCal.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-600 hover:border-amber-400';
+      if (btnEdit) btnEdit.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-600 hover:border-amber-400';
+      if (btnMat) btnMat.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900';
+      if (btnKitchen) btnKitchen.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]';
 
+      // 2. 根據不同視角，點亮按鈕並顯化對應面板
       if (view === 'calendar') {
-        btnCal.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 shadow';
+        if (btnCal) btnCal.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 shadow';
         calContainer.style.display = 'block';
         matContainer.style.display = 'none';
         editInputs.style.display = 'none';
-        queryContainer.style.display = 'flex';
+        queryContainer.style.display = 'flex'; // 🌟 月曆模式：顯示查詢框 (圖8274)
+        renderCalendar(currentYear, currentMonth);
+      } else if (view === 'edit') {
+        if (btnEdit) btnEdit.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 shadow';
+        calContainer.style.display = 'block';
+        matContainer.style.display = 'none';
+        editInputs.style.display = 'block'; // 🌟 報更模式：顯示舊更載入框與填表區 (圖8275)
+        queryContainer.style.display = 'none';
         renderCalendar(currentYear, currentMonth);
       } else if (view === 'matrix') {
-        if (btnMat) {
-          btnMat.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 shadow';
-        }
+        if (btnMat) btnMat.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 shadow';
         calContainer.style.display = 'none';
         matContainer.style.display = 'block';
         editInputs.style.display = 'none';
         queryContainer.style.display = 'none';
         loadRecords().then(() => renderMatrixTable(currentYear, currentMonth));
-      } else if (view === 'edit') {
-        btnEdit.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 shadow';
-        calContainer.style.display = 'block';
+      } else if (view === 'kitchen') {
+        // 🌟 預留給 Phase 5 的「編更作戰中樞」
+        if (btnKitchen) btnKitchen.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 shadow';
+        calContainer.style.display = 'none';
         matContainer.style.display = 'none';
-        editInputs.style.display = 'block';
+        editInputs.style.display = 'none';
         queryContainer.style.display = 'none';
-        renderCalendar(currentYear, currentMonth);
+        // 這裡稍後會喚醒 `#viewKitchenContainer`
+        handleOpenApprovalModalAction(); // 暫時維持舊有呼叫，確保不報錯
       }
     }
-
     function getSubSlots(timeSlotStr, dateStr) {
       if (!timeSlotStr) return [];
       let slots = timeSlotStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -2905,11 +2926,15 @@
       }
     }
 
-    function updateStatusBadge() {
+	function updateStatusBadge() {
       if (pollStageStatus === 'Stage1') {
         updateStatusBadgeText('🟡 第一階段：OM 優先報更中', 'bg-amber-500/20 text-amber-300 border-amber-500/40');
       } else if (pollStageStatus === 'Stage2') {
         updateStatusBadgeText('🟢 第二階段：全體導師開放中', 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40');
+      } else if (pollStageStatus === 'Drafting') {
+        updateStatusBadgeText('🔵 編更中 (已截報更)', 'bg-blue-900/60 text-blue-300 border-blue-500/40');
+      } else if (pollStageStatus === 'Published') {
+        updateStatusBadgeText('🟣 本月更表已發布', 'bg-purple-900/60 text-purple-300 border-purple-500/40');
       } else {
         updateStatusBadgeText('🔴 已關閉報更', 'bg-red-500/20 text-red-400 border-red-500/40');
       }
@@ -2921,7 +2946,7 @@
       b.innerText = text;
     }
 
-    function updateAutoTitle() {
+	function updateAutoTitle() {
       const pollSelect = document.getElementById('setupPollSelect');
       if (!pollSelect) return;
       const ym = parsePollYearMonth(pollSelect.value);
@@ -2930,9 +2955,11 @@
       let stageText = "導師";
       if (stageVal === 'Stage1') stageText = "OM";
       else if (stageVal === 'Stage2') stageText = "導師";
+      else if (stageVal === 'Drafting') stageText = "編更中";
+      else if (stageVal === 'Published') stageText = "確定更表 (已發布)";
       else if (stageVal === 'Closed') stageText = "報更 (已關閉)";
 
-      const autoTitle = (stageVal === 'Closed') ? `${ym.month}月 ${stageText}` : `${ym.month}月 ${stageText} 報更`;
+      const autoTitle = (stageVal === 'Closed' || stageVal === 'Drafting' || stageVal === 'Published') ? `${ym.month}月 ${stageText}` : `${ym.month}月 ${stageText} 報更`;
       document.getElementById('setupTitle').value = autoTitle;
     }
 
@@ -3981,7 +4008,13 @@
       table.innerHTML = headerHtml + bodyHtml;
     }
 
-    function copyTutorWhatsAppSchedule(tutorId) {
+	function copyTutorWhatsAppSchedule(tutorId) {
+      // 🌟 防早洩鎖定：如果更表處於排班推演中 (Drafting)，嚴禁複製更表給導師！
+      if (pollStageStatus === 'Drafting') {
+        customAlert('⚠️ 動作已被力場鎖定！\n\n本月更表目前處於【🔵 幕後排更推演中】狀態，尚未對外定案。\n\n請在大元帥按下「🚀 正式發布更表」後，再執行 WhatsApp 複製發送，以免引起導師混淆！');
+        return;
+      }
+
       const recs = adminRecords.filter(r => formatTutorId(r.tutorId) === tutorId);
       if (recs.length === 0) {
         customAlert(`ℹ️ 導師 [${tutorId}] 本月暫無報更或排班紀錄。`);
