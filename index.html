@@ -4009,9 +4009,9 @@
     }
 
 	function copyTutorWhatsAppSchedule(tutorId) {
-      // 🌟 防早洩鎖定：如果更表處於排班推演中 (Drafting)，嚴禁複製更表給導師！
+      // 🌟 防早洩鎖定：如果更表處於編更中 (Drafting)，嚴禁複製更表給導師！
       if (pollStageStatus === 'Drafting') {
-        customAlert('⚠️ 動作已被力場鎖定！\n\n本月更表目前處於【🔵 幕後排更推演中】狀態，尚未對外定案。\n\n請在大元帥按下「🚀 正式發布更表」後，再執行 WhatsApp 複製發送，以免引起導師混淆！');
+        customAlert('⚠️ 動作鎖定！\n\n本月更表處於【🔵 編更中】狀態，尚未定案。\n\n請在「🚀 正式發布更表」後，再執行 WhatsApp 複製發送，以免引起導師混淆！');
         return;
       }
 
