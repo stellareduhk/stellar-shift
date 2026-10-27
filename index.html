@@ -2920,11 +2920,7 @@
             updateStatusBadgeText('🔴 已截止報更', 'bg-red-500/20 text-red-400 border-red-500/40');
           } else {
             updateStatusBadge();
-          } else {
-            pollDeadlineStr = '';
-            isExpired = false;
-            document.getElementById('labelDeadline').innerText = '⏰ 截止時間：未設定';
-          }
+          } 
         }
       } catch (err) {
         console.error('Settings load error:', err);
