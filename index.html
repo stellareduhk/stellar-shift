@@ -2902,19 +2902,24 @@
 
           updateTutorBatchSlotOptions();
 
-          pollStageStatus = targetSetting.status || 'Stage2';
-          updateStatusBadge();
+		pollStageStatus = targetSetting.status || 'Stage2';
 
           if (targetSetting.deadline) {
             pollDeadlineStr = targetSetting.deadline;
             document.getElementById('labelDeadline').innerText = `⏰ 截止時間：${pollDeadlineStr}`;
             const dDate = new Date(pollDeadlineStr.replace(' ', 'T'));
-            if (!isNaN(dDate.getTime()) && new Date() > dDate) {
-              isExpired = true;
-              updateStatusBadgeText('🔴 已截止報更', 'bg-red-500/20 text-red-400 border-red-500/40');
-            } else {
-              isExpired = false;
-            }
+            isExpired = (!isNaN(dDate.getTime()) && new Date() > dDate);
+          } else {
+            pollDeadlineStr = '';
+            isExpired = false;
+            document.getElementById('labelDeadline').innerText = '⏰ 截止時間：未設定';
+          }
+
+          // 🌟 修正優先級：若處於 Stage1 或 Stage2 且過期，才顯化「已截止報更」；Drafting/Published 保持專屬徽章
+          if (isExpired && (pollStageStatus === 'Stage1' || pollStageStatus === 'Stage2')) {
+            updateStatusBadgeText('🔴 已截止報更', 'bg-red-500/20 text-red-400 border-red-500/40');
+          } else {
+            updateStatusBadge();
           } else {
             pollDeadlineStr = '';
             isExpired = false;
@@ -3161,11 +3166,19 @@
           })
         });
         const json = await res.json();
-        if (json.status === 'success') {
-          customAlert('⚙️ 報更設定已成功發布 / 更新！\n三色營運曆狀態（綠/紫/紅）已完美鎖定同步！');
+		if (json.status === 'success') {
+          const statusNames = {
+            'Stage1': '🟡 第一階段：OM 優先報更',
+            'Stage2': '🟢 第二階段：全體導師開放',
+            'Drafting': '🔵 編更中 (僅限 OM 查閱原報)',
+            'Published': '🟣 更表已發布',
+            'Closed': '🔴 關閉 / 停止報更'
+          };
+          const currentStatusText = statusNames[statusVal] || statusVal;
+          customAlert(`⚙️ 報更設定已成功發布 / 更新！\n\n📌 當前月份狀態：${currentStatusText}\n🗓️ 營運日曆與開放日子已同步寫入雲端！`);
           selectedSlotsMap = {}; 
           closeAdminModal();
-
+			
           const [savedYear, savedMonth] = pollId.split('-').map(Number);
           await switchOperationalMonth(savedYear, savedMonth);
           switchView('calendar');
@@ -4123,7 +4136,11 @@
           
           if (recRes && recRes.status === 'success') {
             adminRecords = recRes.data || [];
-            buildTutorsMap(); 
+		  buildTutorsMap(); 
+            // 🌟 若 OM 同時在查閱個人報更，直接從全體大表精準映射至 personalRecords
+            if (activeQueryTutorId) {
+              personalRecords = adminRecords.filter(r => formatTutorId(r.tutorId) === activeQueryTutorId);
+            }
           }
           if (demandRes && demandRes.status === 'success') {
             dailyDemandList = demandRes.data || [];
@@ -4252,8 +4269,19 @@
           });
         }
 
-        if (currentView !== 'edit') {
-          if (isAuth && adminRecords.length > 0) {
+		if (currentView !== 'edit') {
+          // 🌟 優先級提升：不論是否為 OM 登入，只要有指定查詢導師，一律優先顯化該導師個人紀錄
+          if (activeQueryTutorId && (personalRecords.length > 0 || !isAuth)) {
+            const myRec = personalRecords.find(r => r.date === dateStr);
+            if (myRec) {
+              const meta = parseRecordMeta(myRec);
+              let disp = meta.approvedSlots.length > 0 ? meta.approvedSlots.join(', ') : meta.originalSlotsStr;
+              cellHtml += `<div class="text-amber-300 font-bold truncate">✓ 已報：${disp}</div>`;
+            } else {
+              cellHtml += dayStatusTag;
+            }
+          } else if (isAuth && adminRecords.length > 0) {
+            // 無指定查詢時，OM 模式正常展現全體導師名單
             const dayRecs = adminRecords.filter(r => r.date === dateStr);
             let approvedElements = [];
             let pendingNames = [];
@@ -4281,25 +4309,18 @@
             } else {
               cellHtml += dayStatusTag;
             }
-          } else if (activeQueryTutorId && activeQuerySurname) {
-            const myRec = personalRecords.find(r => r.date === dateStr);
-            if (myRec) {
-              const meta = parseRecordMeta(myRec);
-              let disp = meta.approvedSlots.length > 0 ? meta.approvedSlots.join(', ') : meta.originalSlotsStr;
-              cellHtml += `<div class="text-amber-300 font-bold truncate">✓ 已報：${disp}</div>`;
-            } else {
-              cellHtml += dayStatusTag;
-            }
           } else {
             cellHtml += dayStatusTag;
           }
         } else {
           if (!isOpenDate) {
             cellHtml += `<div class="text-slate-600 text-[9px]">🔒 未開放</div>`;
-          } else if (isPollClosed || isExpired) {
-            cellHtml += `<div class="text-red-400/80 text-[9px]">🔴 停報更</div>`;
           } else if (selectedSlotText) {
-            cellHtml += `<div class="text-amber-400 font-bold truncate">✓ ${selectedSlotText}</div>`;
+            // 🌟 優先顯化載入到的報更時段
+            const lockTag = (isPollClosed || isExpired || pollStageStatus === 'Drafting') ? '<span class="text-[9px] text-slate-400 ml-1">(鎖定)</span>' : '';
+            cellHtml += `<div class="text-amber-400 font-bold truncate">✓ ${selectedSlotText}${lockTag}</div>`;
+          } else if (isPollClosed || isExpired || pollStageStatus === 'Drafting') {
+            cellHtml += `<div class="text-red-400/80 text-[9px]">🔴 停報更</div>`;
           } else {
             cellHtml += `<div class="text-amber-300/80 font-semibold text-[10px]">+ 點擊選時段</div>`;
           }
