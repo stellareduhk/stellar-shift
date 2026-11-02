@@ -2058,7 +2058,9 @@
             let cellBgClass = "bg-slate-950/40 text-slate-600";
             let cellText = "—";
 
-            const isAttending = ['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT', 'SCHEDULED'].includes(currentStatus);
+        	// 🌟 防幽靈手術刀：SCHEDULED 必須在真常規日才算出席，彻底排除無課橫線「—」
+            const isAttending = ['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT'].includes(currentStatus) || 
+                                (currentStatus === 'SCHEDULED' && isRegularSchoolDay);
 
             if (currentStatus === 'PRESENT') {
               cellBgClass = "bg-emerald-600 text-white font-bold cursor-pointer";
@@ -2526,7 +2528,10 @@
             const slotOverride = attendanceSlotOverrideMap[key] || '';
             const effectiveSlot = slotOverride || baseSlot;
 
-            if (['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT', 'SCHEDULED'].includes(currentStatus) && !isClosed) {
+   			// 🌟 防幽靈手術刀：雲端埋數同步排除非上課日的 SCHEDULED 幽靈
+            const isRealAttending = ['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT'].includes(currentStatus) || 
+                                    (currentStatus === 'SCHEDULED' && isRegularSchoolDay);
+            if (isRealAttending && !isClosed) {
               const isHigh = isHighGrade(st.grade);
               if (effectiveSlot === 'S1') {
                 if (isHigh) s1High++; else s1Low++;
