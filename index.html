@@ -1831,7 +1831,24 @@
 
       // 🌟 全域動態算力中心 (即時換算任意日期的目標人手)
     function getDynamicDemandForDate(dateStr) {
-      if (!dateStr) return { s1Need: 0, s2Need: 0, label: '0/0', isClosed: true };
+	  if (!dateStr) return { s1Need: 0, s2Need: 0, label: '0/0', isClosed: true };
+
+      // 🌟 核心修復：優先讀取已儲存的 Daily_Demand 真理數據 (Truth First)
+      if (typeof dailyDemandList !== 'undefined' && Array.isArray(dailyDemandList) && dailyDemandList.length > 0) {
+        const savedDemand = dailyDemandList.find(d => String(d.date || '').trim() === dateStr.trim());
+        if (savedDemand) {
+          const s1N = parseInt(savedDemand.s1TutorsNeeded, 10) || 0;
+          const s2N = parseInt(savedDemand.s2TutorsNeeded, 10) || 0;
+          const lbl = savedDemand.ratioLabel || `${s1N}/${s2N}`;
+          const isClosedDay = (lbl === '0/0' || savedDemand.specialNotes === '全館休息');
+          return {
+            s1Need: s1N,
+            s2Need: s2N,
+            label: lbl,
+            isClosed: isClosedDay
+          };
+        }
+      }
       
       const dateObj = new Date(dateStr.replace(/-/g, '/'));
       let dayOfWeekIso = dateObj.getDay();
