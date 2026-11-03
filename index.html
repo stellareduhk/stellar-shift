@@ -2335,7 +2335,9 @@
             const slotOverride = attendanceSlotOverrideMap[key] || '';
             const effectiveSlot = slotOverride || baseSlot;
 
-            const isAttending = ['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT', 'SCHEDULED'].includes(currentStatus);
+			// 🌟 1. 算力計數同步防幽靈門禁 (排除非上課日的 SCHEDULED)
+            const isAttending = ['PRESENT', 'LATE', 'MAKEUP', 'MAKEUP_PRESENT'].includes(currentStatus) || 
+                                (currentStatus === 'SCHEDULED' && isRegularSchoolDay);
 
             // 累計每日出勤數據
             if (isAttending && !isClosed) {
@@ -2370,11 +2372,50 @@
               }
             }
 
-            if (isRegularSchoolDay && currentStatus !== 'CANCELLED') {
-              html += `<td class="print-on-cell" style="border:1px solid #000; background-color:#fff !important;"></td>`;
+            // 🌟 2. 實體紙本單元格視覺渲染 (100% 執行指揮官 2 大微標註規格)
+            let cellBg = '#FFFFFF';
+            let cellClass = 'print-on-cell';
+            let printNotes = [];
+
+            const isMakeup = (currentStatus === 'MAKEUP' || currentStatus === 'MAKEUP_PRESENT');
+            const isCancelled = (currentStatus === 'CANCELLED');
+
+            if (isClosed) {
+              cellBg = '#D4D4D8';
+              cellClass = 'print-off-cell';
+            } else if (isMakeup) {
+              // 規格一：預約補堂 -> 淺灰底 (本質非上課日) + 印出 [補S1/S2]
+              cellBg = '#D4D4D8';
+              cellClass = 'print-off-cell';
+              printNotes.push(`[補${effectiveSlot}]`);
+            } else if (isCancelled) {
+              // 請假免扣 -> 淺灰底 + 印出 [假]
+              cellBg = '#D4D4D8';
+              cellClass = 'print-off-cell';
+              printNotes.push('[假]');
+            } else if (isRegularSchoolDay) {
+              // 常規上學日 -> 純白底留空
+              cellBg = '#FFFFFF';
+              cellClass = 'print-on-cell';
             } else {
-              html += `<td class="print-off-cell" style="border:1px solid #000; background-color:#D4D4D8 !important;"></td>`;
+              // 普通非上學日 -> 淺灰底
+              cellBg = '#D4D4D8';
+              cellClass = 'print-off-cell';
             }
+
+            // 規格二：轉時間 (S1>S2 / S2>S1) 及 單日異動備註 -> 印出極細文字
+            const cellRemarks = attendanceRemarksMap[key] || '';
+            if (slotOverride && slotOverride !== baseSlot && !isMakeup) {
+              printNotes.push(`[${slotOverride}]`);
+            }
+            if (cellRemarks && !isCancelled) {
+              printNotes.push(cellRemarks);
+            }
+
+            const noteText = printNotes.join(' ');
+            const contentHtml = noteText ? `<div style="font-size:6.5px; line-height:1; font-weight:bold; color:#000; letter-spacing:-0.2px;">${noteText}</div>` : '';
+
+            html += `<td class="${cellClass}" style="border:1px solid #000; background-color:${cellBg} !important; vertical-align:middle; text-align:center;">${contentHtml}</td>`;
           }
 
           // 右側統計欄實體留空
