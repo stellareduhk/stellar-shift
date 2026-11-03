@@ -2314,7 +2314,12 @@
 
         grp.students.forEach(st => {
           const baseSlot = st.timeSlot || 'S1';
-          const isHigh = isHighGrade(st.grade);
+    	  const isHigh = isHighGrade(st.grade);
+
+          let totalPresent = 0;
+          let totalAbsent = 0;
+          let totalPlannedMakeup = 0;
+          let totalMakeupUsed = 0;
 
           html += `<tr style="height:17px;">`;
           html += `<td style="border:1px solid #000; font-weight:bold; text-align:center;">${st.studentName}</td>`;
@@ -2378,8 +2383,20 @@
             let cellClass = 'print-on-cell';
             let printNotes = [];
 
-            const isMakeup = (currentStatus === 'MAKEUP' || currentStatus === 'MAKEUP_PRESENT');
+			const isMakeup = (currentStatus === 'MAKEUP' || currentStatus === 'MAKEUP_PRESENT');
             const isCancelled = (currentStatus === 'CANCELLED');
+
+            // 🌟 統計數值累加 (消除 ReferenceError 崩潰)
+            if (currentStatus === 'PRESENT' || currentStatus === 'LATE') {
+              totalPresent++;
+            } else if (currentStatus === 'ABSENT') {
+              totalAbsent++;
+            } else if (currentStatus === 'MAKEUP') {
+              totalPlannedMakeup++;
+            } else if (currentStatus === 'MAKEUP_PRESENT') {
+              totalPresent++;
+              totalMakeupUsed++;
+            }
 
             if (isClosed) {
               cellBg = '#D4D4D8';
