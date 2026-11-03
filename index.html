@@ -933,6 +933,7 @@
     let adminRecords = [];      
     
     let pollDeadlineStr = '';
+    let currentPrintVersion = 1;
     let configuredOpenDates = []; 
     let configuredSpecialDates = []; 
     let isExpired = false;
@@ -2241,7 +2242,7 @@
 
       const now = new Date();
       const exportDateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-      const versionStr = `V${pdfPrintCounts[schedulePollId] || 1}`;
+      const versionStr = `V${currentPrintVersion || 1}`;
 
       // 🌟 初始化每日統計計數器 (用於計算 8132 底部數據)
       const dailyS1HighCount = new Array(daysInMonth + 1).fill(0);
@@ -2418,11 +2419,15 @@
             html += `<td class="${cellClass}" style="border:1px solid #000; background-color:${cellBg} !important; vertical-align:middle; text-align:center;">${contentHtml}</td>`;
           }
 
-          // 右側統計欄實體留空
-          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
-          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
-          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
-          html += `<td style="border:1px solid #000; background:#fff;"></td>`;
+		  // 🌟 萬接魔導師：將實時出勤統計焊接至實體紙本 (大於0顯示，等於0留空)
+          const prevBalance = prevMonthBalanceMap[st.studentId] || 0;
+          const currentAbsent = totalAbsent;
+          const netMakeupPending = Math.max(0, (prevBalance + currentAbsent) - totalMakeupUsed);
+
+          html += `<td style="border:1px solid #000; background:#fff; text-align:center; font-weight:bold; font-size:8.5px;">${totalPresent > 0 ? totalPresent : ''}</td>`;
+          html += `<td style="border:1px solid #000; background:#fff; text-align:center; font-weight:bold; font-size:8.5px; color:#b91c1c;">${currentAbsent > 0 ? currentAbsent : ''}</td>`;
+          html += `<td style="border:1px solid #000; background:#fff; text-align:center; font-weight:bold; font-size:8.5px; color:#0369a1;">${prevBalance > 0 ? prevBalance : ''}</td>`;
+          html += `<td style="border:1px solid #000; background:#fff; text-align:center; font-weight:bold; font-size:8.5px; color:#7e22ce;">${netMakeupPending > 0 ? netMakeupPending : ''}</td>`;
           html += `</tr>`;
         });
       });
@@ -2649,25 +2654,18 @@
       });
     }
 
-	let pdfPrintCounts = {};
-    function printSchedulePDF() {
+	  async function printSchedulePDF() {
       const pollId = schedulePollId;
+      const printVerToUse = currentPrintVersion || 1;
 
-      // 1. 每印一次版本號自動 +1 (V1 -> V2...)
-      if (!pdfPrintCounts[pollId]) { 
-        pdfPrintCounts[pollId] = 1; 
-      } else { 
-        pdfPrintCounts[pollId]++; 
-      }
-
-      // 2. 獨立組裝實體列印專用表格 (只寫入隱形容器，完全不碰網頁畫面)
+      // 1. 獨立組裝實體列印專用表格 (只寫入隱形容器，完全不碰網頁畫面)
       buildPrintScheduleTable();
 
-      // 3. 準備 PDF 預設檔名 (例如 2610_V1)
+      // 2. 準備 PDF 預設檔名 (例如 2611_V3)
       const parts = pollId.split('-');
       const yy = parts.length === 2 ? parts[0].substring(2) : '26';
       const mm = parts.length === 2 ? parts[1] : '10';
-      const newTitle = `${yy}${mm}_V${pdfPrintCounts[pollId]}`;
+      const newTitle = `${yy}${mm}_V${printVerToUse}`;
       const oldTitle = document.title;
 
       document.title = newTitle;
@@ -2675,6 +2673,21 @@
         window.print();
         document.title = oldTitle;
       }, 150);
+
+      // 🌟 3. 背景發射雲端訊號：通知後台將版本號自動 +1 (跨設備永不重置)
+      currentPrintVersion++;
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'incrementPrintVersion',
+            pollId: pollId
+          })
+        });
+      } catch (err) {
+        console.error('Increment print version error:', err);
+      }
     }
 
 	// === Part 4/4：【核心運算與三重紅色警示網 (Core Logic & Red Alert Net)】 ===
@@ -2919,6 +2932,7 @@
         if (json.status === 'success' && json.data.length > 0) {
           allSettingsList = json.data;
           const targetSetting = json.data.find(s => s.pollId === currentPollId) || json.data[json.data.length - 1];
+          currentPrintVersion = targetSetting.printVersion || 1;
           
           document.getElementById('pollTitle').innerText = targetSetting.title || `${currentMonth}月 OM / 導師報更`;
           
