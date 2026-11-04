@@ -4014,7 +4014,7 @@
         const isClosed = closedDates.includes(dateStr) || (closedDates.length === 0 && (isSun || isHkHol));
         closedDaysMap[day] = isClosed;
 
-        const thBg = isClosed ? 'bg-red-950/80 text-red-400' : 'bg-slate-900/95 text-slate-200';
+        const thBg = isClosed ? 'bg-red-950 text-red-400' : 'bg-slate-950 text-slate-200';
         const subColor = isClosed ? 'text-red-400/80' : 'text-slate-400';
 
         headerHtml += `
@@ -4031,7 +4031,7 @@
         const tname = matrixTutorsMap[tid];
         bodyHtml += `<tr class="hover:bg-slate-800/60 transition">`;
         // 🌟 十字二維定錨：左側導師姓名與按鈕橫向凍結 (z-10)
-        bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-slate-200 bg-slate-900 sticky left-0 z-10 min-w-[170px] shadow-sm">
+        bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-slate-200 bg-slate-950 sticky left-0 z-10 min-w-[170px] shadow-md">
           <div class="flex items-center justify-between gap-1.5">
             <span class="truncate text-xs">${tid}${tname !== tid ? ' - ' + tname : ''}</span>
             <button onclick="copyTutorWhatsAppSchedule('${tid}')" type="button" class="bg-amber-400/20 text-amber-300 hover:bg-amber-400 hover:text-slate-900 border border-amber-400/40 px-2 py-0.5 rounded text-[10px] font-bold transition flex-shrink-0">📋 複製更表</button>
@@ -4070,7 +4070,7 @@
 
       // 🌟 算力大一統：矩陣圖目標人手需求行 (紅日對位透紅)
       bodyHtml += `<tr class="bg-slate-900 border-t-2 border-amber-400/50">`;
-      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-amber-400 text-right text-[10px] sticky left-0 bg-slate-900 z-10 shadow-sm">🎯 目標人手需求 (S1/S2)：</td>`;
+      bodyHtml += `<td class="p-2 border border-slate-700 font-bold text-emerald-400 text-right text-[10px] sticky left-0 bg-slate-950 z-10 shadow-md">✅ 當前獲批估算 (S1/S2)：</td>`;
       for(let day=1; day<=daysInMonth; day++) {
          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
          const demandInfo = getDynamicDemandForDate(dateStr);
