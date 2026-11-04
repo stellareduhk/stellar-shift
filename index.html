@@ -159,8 +159,8 @@
       <button id="btnOMAttendance" onclick="handleOpenOMAttendanceAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow hover:bg-emerald-500">📝 學生點名</button>
 
 	  <!-- 🌟 OM & Commander 專用按鈕 -->
-      <button id="btnViewMatrix" onclick="switchView('matrix')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900">📊 樞紐矩陣總表</button>
-      <button id="btnKitchenMode" onclick="handleOpenApprovalModalAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]">🚀 編更作戰中樞</button>
+      <button id="btnViewMatrix" onclick="switchView('matrix')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900">📊 導師報更矩陣</button>
+      <button id="btnKitchenMode" onclick="handleOpenApprovalModalAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]">📅 編更模式</button>
       <button id="btnAdminSetup" onclick="handleOpenAdminSetupAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-purple-200 border border-purple-500 hover:bg-purple-800">⚙️ 報更設定</button>
       
       <!-- 🌟 簡化單一登入按鈕 -->
@@ -294,7 +294,7 @@
       <button onclick="closeApprovalModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">✕</button>
       <div class="flex justify-between items-center pr-6">
         <h3 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
-          <span>✅ 導師報更排班審核面板</span>
+          <span>📅 編更模式 (導師審核)</span>
         </h3>
         <button onclick="showAllBackupPool()" type="button" class="bg-purple-900/80 hover:bg-purple-800 text-purple-200 border border-purple-400/60 text-xs px-3 py-1.5 rounded-lg font-bold transition">
           📦 全月後備/被拒導師總表
@@ -317,6 +317,68 @@
     </div>
   </div>
 
+  <!-- 📅 單日編更模式彈窗 (Single Day Shift Modal) -->
+  <div id="singleDayShiftModal" style="display: none;" class="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-start justify-center p-3 md:p-4 pt-6 md:pt-10 z-[85]">
+    <div class="stellar-card p-5 md:p-6 rounded-2xl max-w-xl w-full relative border border-amber-400/60 max-h-[92vh] overflow-y-auto custom-scrollbar space-y-4">
+      <button onclick="closeSingleDayShiftModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl">✕</button>
+      
+      <!-- 1. 頂部算力儀表艙 -->
+      <div class="border-b border-slate-700 pb-3 pr-8">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="navigateSingleDayShift(-1)" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-xs font-bold border border-slate-600">◀ 前一日</button>
+            <h3 id="singleDayDateTitle" class="text-base md:text-lg font-bold text-amber-400">2026-11-13 (載入中...)</h3>
+            <button type="button" onclick="navigateSingleDayShift(1)" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-xs font-bold border border-slate-600">後一日 ▶</button>
+          </div>
+          <span id="singleDayStatusBadge" class="px-2 py-0.5 rounded text-[11px] font-bold bg-red-600 text-white">載入中</span>
+        </div>
+        
+        <!-- 動態天秤數據牌 -->
+        <div id="singleDayDemandSummary" class="mt-2.5 p-2 bg-slate-900/90 rounded-lg border border-slate-800 text-xs flex flex-wrap items-center justify-between gap-2 text-slate-300">
+          <div>👥 學生人數：<span id="singleDayStudentCount" class="text-amber-300 font-bold">-</span></div>
+          <div>🎯 目標需求：<span id="singleDayTargetRatio" class="text-purple-300 font-bold">-</span></div>
+          <div>✅ 現有獲批：<span id="singleDayApprovedRatio" class="text-emerald-300 font-bold">-</span></div>
+        </div>
+      </div>
+
+      <!-- 2. 中部：當日已獲批導師名單 -->
+      <div class="space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+            <span>🟢 當日已派更名單 (<span id="singleDayApprovedCount">0</span> 人)：</span>
+          </label>
+        </div>
+        <div id="singleDayApprovedList" class="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+          <p class="text-xs text-slate-500 text-center py-4">載入中...</p>
+        </div>
+      </div>
+
+      <!-- 3. 底部：可用戰力儲存池 (候選導師池) -->
+      <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+            <span>⚡ 可用戰力候選池 (點擊秒速派更)：</span>
+          </label>
+          <button type="button" onclick="toggleAllTutorsPool()" id="btnToggleAllTutors" class="text-[11px] text-purple-300 hover:text-amber-300 underline">展開全體名冊</button>
+        </div>
+        <div id="singleDayCandidateList" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+          <p class="text-xs text-slate-500 text-center py-3">載入中...</p>
+        </div>
+      </div>
+
+      <!-- 4. 底部存檔按鈕 -->
+      <div class="flex gap-2 pt-2 border-t border-slate-700">
+        <button id="btnSaveSingleDayShift" onclick="saveSingleDayShift()" type="button" class="w-full stellar-btn-gold py-2.5 rounded text-xs font-bold shadow transition">
+          💾 確認儲存本日編更 (雲端原子更新)
+        </button>
+        <button onclick="closeSingleDayShiftModal()" type="button" class="w-1/3 bg-slate-800 text-slate-300 py-2.5 rounded text-xs hover:bg-slate-700">
+          取消
+        </button>
+      </div>
+
+    </div>
+  </div>
+	
   <div id="stellarAlertModal" style="display: none;" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start justify-center p-4 pt-12 md:pt-20 z-[100]">
     <div class="stellar-card p-6 rounded-2xl max-w-md w-full relative border border-amber-400/60 shadow-2xl text-center space-y-4">
       <h4 class="text-base font-bold text-amber-400 flex items-center justify-center gap-1.5">
@@ -3737,7 +3799,21 @@
       document.getElementById('approvalModal').style.display = 'flex';
     }
 
-    function closeApprovalModal() { document.getElementById('approvalModal').style.display = 'none'; }
+	function closeApprovalModal() { document.getElementById('approvalModal').style.display = 'none'; }
+
+    // 🌟 單日編更模式：基礎開關函式
+    let currentSingleDayShiftDate = '';
+    function openSingleDayShiftModal(dateStr) {
+      currentSingleDayShiftDate = dateStr;
+      const modal = document.getElementById('singleDayShiftModal');
+      const title = document.getElementById('singleDayDateTitle');
+      if (title) title.innerText = `${dateStr} (載入中...)`;
+      if (modal) modal.style.display = 'flex';
+    }
+    function closeSingleDayShiftModal() {
+      const modal = document.getElementById('singleDayShiftModal');
+      if (modal) modal.style.display = 'none';
+    }
 
     function loadTutorApprovalList(tutorId) {
       const container = document.getElementById('approvalListContainer');
