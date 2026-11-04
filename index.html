@@ -3801,18 +3801,34 @@
 
 	function closeApprovalModal() { document.getElementById('approvalModal').style.display = 'none'; }
 
-    // 🌟 單日編更模式：基礎開關函式
+    // 🌟 單日編更模式：升級版開關與時空導航引擎
     let currentSingleDayShiftDate = '';
     function openSingleDayShiftModal(dateStr) {
       currentSingleDayShiftDate = dateStr;
       const modal = document.getElementById('singleDayShiftModal');
       const title = document.getElementById('singleDayDateTitle');
-      if (title) title.innerText = `${dateStr} (載入中...)`;
+      
+      const d = new Date(dateStr.replace(/-/g, '/'));
+      const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
+      const wDay = isNaN(d.getTime()) ? '' : ` (星期${weekDayNames[d.getDay()]})`;
+      
+      if (title) title.innerText = `${dateStr}${wDay}`;
       if (modal) modal.style.display = 'flex';
     }
+
     function closeSingleDayShiftModal() {
       const modal = document.getElementById('singleDayShiftModal');
       if (modal) modal.style.display = 'none';
+    }
+
+    function navigateSingleDayShift(delta) {
+      if (!currentSingleDayShiftDate) return;
+      const d = new Date(currentSingleDayShiftDate.replace(/-/g, '/'));
+      d.setDate(d.getDate() + delta);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      openSingleDayShiftModal(`${y}-${m}-${day}`);
     }
 
     function loadTutorApprovalList(tutorId) {
@@ -4134,11 +4150,11 @@
               cellClass = isDayClosed ? 'bg-red-950/25 text-red-900/50' : 'text-slate-700';
             }
 
-            bodyHtml += `<td class="p-1 border border-slate-700 text-center ${cellClass} text-[10px]">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}</td>`;
+			bodyHtml += `<td onclick="openSingleDayShiftModal('${dateStr}')" class="p-1 border border-slate-700 text-center ${cellClass} text-[10px] cursor-pointer hover:border-amber-400 transition" title="點擊進入 ${dateStr} 單日編更">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}</td>`;
           } else {
             // 🌟 休息日成行通紅：完全無報更格整排紅底
             const emptyCellClass = isDayClosed ? 'bg-red-950/25 text-red-900/50' : 'text-slate-700';
-            bodyHtml += `<td class="p-1 border border-slate-700 text-center ${emptyCellClass}">—</td>`;
+            bodyHtml += `<td onclick="openSingleDayShiftModal('${dateStr}')" class="p-1 border border-slate-700 text-center ${emptyCellClass} cursor-pointer hover:border-amber-400 transition" title="點擊進入 ${dateStr} 單日編更">—</td>`;
           }
         }
         bodyHtml += `</tr>`;
@@ -4413,8 +4429,8 @@
             const s2Short = Math.max(0, s2Need - s2App);
             const totalShort = s1Short + s2Short;
 
-            if (totalShort > 0) {
-                demandAlertHtml = `<div class="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full alert-pulse-red shadow-lg z-10">🎯 欠 ${totalShort} 人</div>`;
+			if (totalShort > 0) {
+                demandAlertHtml = `<div onclick="event.stopPropagation(); openSingleDayShiftModal('${dateStr}')" class="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full alert-pulse-red shadow-lg z-10 cursor-pointer transition hover:scale-105" title="點擊進入單日編更模式">🎯 欠 ${totalShort} 人</div>`;
             }
         }
 
