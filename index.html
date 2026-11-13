@@ -1006,7 +1006,8 @@
     let activeEditingDate = '';
 
     let approvalStateMap = {}; 
-    let tutorsMap = {};
+	let tutorsMap = {};
+    let permanentTutorsList = [];
 
     let masterStudentsList = [];
     let currentStartYear = new Date().getFullYear();
@@ -3766,8 +3767,15 @@
       } catch (err) { customAlert('提交失敗，請檢查網路連線。'); }
     }
 
-    function buildTutorsMap() {
+	function buildTutorsMap() {
       tutorsMap = {};
+      permanentTutorsList.forEach(tr => {
+        const formattedId = formatTutorId(tr.tutorId);
+        const name = tr.tutorShortName || tr.officialChiName || tr.officialEngName || '';
+        if (formattedId && name && name.trim() !== '' && name.trim() !== formattedId) {
+          tutorsMap[formattedId] = name.trim();
+        }
+      });
       adminRecords.forEach(r => {
         const formattedId = formatTutorId(r.tutorId);
         const name = r.tutorName || r.tutorname || r.TutorName || '';
@@ -3831,9 +3839,9 @@
       return slots.length > 0 ? slots : ['第一節', '第二節'];
     }
 
-    function openSingleDayShiftModal(dateStr) {
+	function openSingleDayShiftModal(dateStr) {
       currentSingleDayShiftDate = dateStr;
-      if (Object.keys(tutorsMap).length === 0 && adminRecords.length > 0) buildTutorsMap();
+      if (Object.keys(tutorsMap).length === 0 && (adminRecords.length > 0 || permanentTutorsList.length > 0)) buildTutorsMap();
 
       const modal = document.getElementById('singleDayShiftModal');
       const title = document.getElementById('singleDayDateTitle');
@@ -3842,8 +3850,9 @@
       const wDay = isNaN(d.getTime()) ? '' : ` (星期${weekDayNames[d.getDay()]})`;
       if (title) title.innerText = `${dateStr}${wDay}`;
 
-      // 1. 收集全體導師名單（結合當月有報更導師 + OM 常備名單）
-      const allIdsSet = new Set([...Object.keys(tutorsMap), ...omAllowList]);
+      // 1. 收集全體導師名單（結合當月有報更導師 + 常駐在職導師庫 + OM 常備名單）
+      const permanentIds = permanentTutorsList.map(tr => formatTutorId(tr.tutorId)).filter(Boolean);
+      const allIdsSet = new Set([...Object.keys(tutorsMap), ...permanentIds, ...omAllowList]);
       const dayRecs = adminRecords.filter(r => r.date === dateStr);
 
       const tutorsList = Array.from(allIdsSet).sort().map(tid => {
@@ -4668,17 +4677,22 @@
       const isAuth = role === 'om' || role === 'commander';
 
       try {
-        if (currentView === 'matrix' || isAuth) {
-          const [recRes, demandRes, stRes, matrixRes] = await Promise.all([
+		if (currentView === 'matrix' || isAuth) {
+          const [recRes, demandRes, stRes, matrixRes, ratesRes] = await Promise.all([
              fetch(`${API_URL}?pollId=${currentPollId}&adminPassword=${activePwd}`).then(r => r.json()),
              fetch(`${API_URL}?action=getDailyDemand&pollId=${currentPollId}`).then(r => r.json()),
              fetch(`${API_URL}?action=getStudents`).then(r => r.json()),
-             fetch(`${API_URL}?action=getTutorRatioMatrix`).then(r => r.json())
+             fetch(`${API_URL}?action=getTutorRatioMatrix`).then(r => r.json()),
+             fetch(`${API_URL}?action=getTutorRates`).then(r => r.json()).catch(() => ({ status: 'success', data: [] }))
           ]);
+
+          if (ratesRes && ratesRes.status === 'success') {
+            permanentTutorsList = (ratesRes.data || []).filter(tr => String(tr.status || 'Active').trim().toLowerCase() === 'active');
+          }
           
           if (recRes && recRes.status === 'success') {
             adminRecords = recRes.data || [];
-		  buildTutorsMap(); 
+		  		  buildTutorsMap(); 
             // 🌟 若 OM 同時在查閱個人報更，直接從全體大表精準映射至 personalRecords
             if (activeQueryTutorId) {
               personalRecords = adminRecords.filter(r => formatTutorId(r.tutorId) === activeQueryTutorId);
