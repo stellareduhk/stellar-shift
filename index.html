@@ -4359,23 +4359,26 @@
       
       const role = localStorage.getItem('stellar_role') || '';
       const isAuth = role === 'om' || role === 'commander';
-      const isPollClosed = (pollStageStatus === 'Closed');
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const firstDayIdx = new Date(year, month - 1, 1).getDay();
+	  const isPollClosed = (pollStageStatus === 'Closed');
+   	  const daysInMonth = new Date(year, month, 0).getDate();
+  	  const firstDayIdx = new Date(year, month - 1, 1).getDay();
+      const setting = allSettingsList.find(s => s.pollId === currentPollId);
+  	  const closedDates = setting && setting.closedDates ? setting.closedDates.split(',').filter(Boolean) : [];
 
-      for (let i = 0; i < firstDayIdx; i++) {
-        grid.innerHTML += `<div class="bg-slate-900/30 rounded-lg day-cell"></div>`;
-      }
+  	  for (let i = 0; i < firstDayIdx; i++) {
+    	grid.innerHTML += `<div class="bg-slate-900/30 rounded-lg day-cell"></div>`;
+ 	  }
 
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dateObj = new Date(year, month - 1, day);
-        
-        const isSunday = dateObj.getDay() === 0;
-        const isHkHoliday = hkPublicHolidays.includes(dateStr);
-        const isRedDay = isSunday || isHkHoliday;
+  	  for (let day = 1; day <= daysInMonth; day++) {
+    	const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    	const dateObj = new Date(year, month - 1, day);
+    
+    	const isSunday = dateObj.getDay() === 0;
+    	const isHkHoliday = hkPublicHolidays.includes(dateStr);
+    	const isManualClosed = closedDates.includes(dateStr);
+    	const isRedDay = isManualClosed || (closedDates.length === 0 && (isSunday || isHkHoliday));
 
-        const dayCount = anonymousSummary[dateStr] || 0;
+   		const dayCount = anonymousSummary[dateStr] || 0;
         const selectedSlotText = selectedSlotsMap[dateStr];
         
         // 🌟 1. 偵測當日是否有特別活動 (掃描紫光頻段)
