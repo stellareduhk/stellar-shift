@@ -3801,19 +3801,285 @@
 
 	function closeApprovalModal() { document.getElementById('approvalModal').style.display = 'none'; }
 
-    // 🌟 單日編更模式：升級版開關與時空導航引擎
+	// 🌟 單日編更模式：Phase 4 刀 11 (Click-to-Fill 零延遲記憶體引擎)
     let currentSingleDayShiftDate = '';
+    let singleDayShiftState = {
+      date: '',
+      showAllTutors: false,
+      tutors: [] // { tid, name, originalSlotsStr, originalSlots, approvedSlots, isDutyOM, hasRecord }
+    };
+
+    function getAssignableSlotsForDate(dateStr) {
+      const dateObj = new Date(dateStr.replace(/-/g, '/'));
+      const dayOfWeek = dateObj.getDay();
+      let hasSpecialEvent = false;
+      const eventTitles = [];
+
+      specialEventsList.forEach(ev => {
+        if (ev.title && ev.startDate && ev.endDate && dateStr >= ev.startDate && dateStr <= ev.endDate) {
+          hasSpecialEvent = true;
+          const cleanTitle = ev.title.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim();
+          if (cleanTitle && !eventTitles.includes(cleanTitle)) eventTitles.push(cleanTitle);
+        }
+      });
+
+      const isWeekendOrSpecial = (dayOfWeek === 0 || dayOfWeek === 6 || configuredSpecialDates.includes(dateStr) || hasSpecialEvent);
+      const baseCfg = isWeekendOrSpecial ? weekendSlotsConfig : weekdaySlotsConfig;
+      const slots = baseCfg.filter(s => s !== '全時段').map(s => s.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim());
+
+      eventTitles.forEach(t => { if (!slots.includes(t)) slots.push(t); });
+      return slots.length > 0 ? slots : ['第一節', '第二節'];
+    }
+
     function openSingleDayShiftModal(dateStr) {
       currentSingleDayShiftDate = dateStr;
+      if (Object.keys(tutorsMap).length === 0 && adminRecords.length > 0) buildTutorsMap();
+
       const modal = document.getElementById('singleDayShiftModal');
       const title = document.getElementById('singleDayDateTitle');
-      
       const d = new Date(dateStr.replace(/-/g, '/'));
       const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
       const wDay = isNaN(d.getTime()) ? '' : ` (星期${weekDayNames[d.getDay()]})`;
-      
       if (title) title.innerText = `${dateStr}${wDay}`;
+
+      // 1. 收集全體導師名單（結合當月有報更導師 + OM 常備名單）
+      const allIdsSet = new Set([...Object.keys(tutorsMap), ...omAllowList]);
+      const dayRecs = adminRecords.filter(r => r.date === dateStr);
+
+      const tutorsList = Array.from(allIdsSet).sort().map(tid => {
+        const rec = dayRecs.find(r => formatTutorId(r.tutorId) === tid);
+        if (rec) {
+          const meta = parseRecordMeta(rec);
+          return {
+            tid: tid,
+            name: meta.name || tutorsMap[tid] || tid,
+            originalSlotsStr: meta.originalSlotsStr || '',
+            originalSlots: meta.originalSlots || [],
+            approvedSlots: [...(meta.approvedSlots || [])],
+            isDutyOM: meta.isDutyOM === 'YES',
+            hasRecord: true
+          };
+        } else {
+          return {
+            tid: tid,
+            name: tutorsMap[tid] || tid,
+            originalSlotsStr: '',
+            originalSlots: [],
+            approvedSlots: [],
+            isDutyOM: false,
+            hasRecord: false
+          };
+        }
+      });
+
+      singleDayShiftState = {
+        date: dateStr,
+        showAllTutors: false,
+        tutors: tutorsList
+      };
+
+      renderSingleDayShiftModal();
       if (modal) modal.style.display = 'flex';
+    }
+
+    function renderSingleDayShiftModal() {
+      const dateStr = singleDayShiftState.date;
+      if (!dateStr) return;
+
+      const assignableSlots = getAssignableSlotsForDate(dateStr);
+      const demandInfo = getDynamicDemandForDate(dateStr);
+
+      // 1. 計算頂部算力儀表數據
+      let s1Stu = 0, s2Stu = 0;
+      const savedDemand = (typeof dailyDemandList !== 'undefined') ? dailyDemandList.find(d => String(d.date || '').trim() === dateStr.trim()) : null;
+      if (savedDemand) {
+        s1Stu = parseInt(savedDemand.s1Students, 10) || 0;
+        s2Stu = parseInt(savedDemand.s2Students, 10) || 0;
+      } else if (!demandInfo.isClosed && typeof masterStudentsList !== 'undefined') {
+        masterStudentsList.filter(s => s.status === 'Active').forEach(st => {
+          if (isStudentScheduledOnDate(st, dateStr)) {
+            if ((st.timeSlot || 'S1') === 'S1') s1Stu++;
+            else if (st.timeSlot === 'S2') s2Stu++;
+          }
+        });
+      }
+
+      const approvedTutors = singleDayShiftState.tutors.filter(t => t.approvedSlots.length > 0);
+      let s1App = 0, s2App = 0;
+      approvedTutors.forEach(t => {
+        if (t.approvedSlots.some(s => s.includes('第一節') || s.includes('S1') || s.includes('全時段'))) s1App++;
+        if (t.approvedSlots.some(s => s.includes('第二節') || s.includes('S2') || s.includes('全時段'))) s2App++;
+      });
+
+      const elStu = document.getElementById('singleDayStudentCount');
+      const elTarget = document.getElementById('singleDayTargetRatio');
+      const elAppRatio = document.getElementById('singleDayApprovedRatio');
+      const elBadge = document.getElementById('singleDayStatusBadge');
+
+      if (elStu) elStu.innerText = demandInfo.isClosed ? '休息日' : `S1:${s1Stu}人 / S2:${s2Stu}人`;
+      if (elTarget) elTarget.innerText = demandInfo.label;
+      if (elAppRatio) elAppRatio.innerText = `${s1App}/${s2App} (共${approvedTutors.length}人)`;
+
+      if (elBadge) {
+        if (demandInfo.isClosed) {
+          elBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-slate-700 text-red-300 border border-red-500/40';
+          elBadge.innerText = '🔴 休息日';
+        } else if (demandInfo.label === '0/0') {
+          elBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-purple-700 text-white';
+          elBadge.innerText = '🟣 專科/活動日';
+        } else {
+          const s1Short = Math.max(0, demandInfo.s1Need - s1App);
+          const s2Short = Math.max(0, demandInfo.s2Need - s2App);
+          const totalShort = s1Short + s2Short;
+          if (totalShort > 0) {
+            elBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-red-600 text-white alert-pulse-red';
+            elBadge.innerText = `🎯 欠 ${totalShort} 人`;
+          } else {
+            elBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-600 text-white';
+            elBadge.innerText = '✅ 達標';
+          }
+        }
+      }
+
+      // 2. 渲染中部：當日已派更名單
+      const elAppCount = document.getElementById('singleDayApprovedCount');
+      const elAppList = document.getElementById('singleDayApprovedList');
+      if (elAppCount) elAppCount.innerText = approvedTutors.length;
+
+      if (elAppList) {
+        if (approvedTutors.length === 0) {
+          elAppList.innerHTML = `<p class="text-xs text-slate-500 text-center py-4 bg-slate-950/50 rounded-lg border border-slate-800">暫未指派任何導師，請從下方候選池點擊派更。</p>`;
+        } else {
+          elAppList.innerHTML = approvedTutors.map(t => {
+            const isOMCandidate = omAllowList.includes(t.tid);
+            const displayName = t.name !== t.tid ? `[${t.tid}] ${t.name}` : `[${t.tid}]`;
+            const origTag = t.originalSlotsStr ? `原報：${t.originalSlotsStr}` : '緊急頂更 (無原報)';
+
+            const slotBtns = assignableSlots.map(slot => {
+              const active = t.approvedSlots.includes(slot);
+              const safeSlot = slot.replace(/'/g, "\\'");
+              return active
+                ? `<button type="button" onclick="removeSingleDaySlot('${t.tid}', '${safeSlot}')" class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-600 text-white shadow transition hover:bg-emerald-500">✅ ${slot}</button>`
+                : `<button type="button" onclick="assignSingleDaySlot('${t.tid}', '${safeSlot}')" class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:border-amber-400 hover:text-amber-300 transition">+ ${slot}</button>`;
+            }).join(' ');
+
+            return `
+              <div class="bg-slate-900 p-2.5 rounded-lg border ${t.isDutyOM ? 'border-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.25)]' : 'border-emerald-500/40'} flex flex-col gap-2">
+                <div class="flex justify-between items-center text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold ${t.isDutyOM ? 'text-purple-300' : 'text-amber-300'}">${displayName}</span>
+                    <span class="text-[10px] text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded">${origTag}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    ${isOMCandidate ? `
+                      <label class="flex items-center gap-1 text-[10px] text-purple-200 bg-purple-950/80 border border-purple-500/50 px-1.5 py-0.5 rounded cursor-pointer font-bold">
+                        <input type="checkbox" ${t.isDutyOM ? 'checked' : ''} onchange="toggleSingleDayDutyOM('${t.tid}', this.checked)" class="rounded text-purple-400">
+                        <span>⭐ 當值OM</span>
+                      </label>
+                    ` : ''}
+                    <button type="button" onclick="clearSingleDayTutor('${t.tid}')" class="text-[11px] text-red-400 hover:text-red-300 font-bold px-1.5 py-0.5 bg-red-950/40 rounded border border-red-800/50">✕ 撤下</button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="text-[10px] text-slate-400">當值節數：</span>
+                  ${slotBtns}
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // 3. 渲染底部：可用戰力候選池 (優先顯示有原報的後備，按需展開全體名冊)
+      const elCandList = document.getElementById('singleDayCandidateList');
+      const btnToggleAll = document.getElementById('btnToggleAllTutors');
+      if (btnToggleAll) {
+        btnToggleAll.innerText = singleDayShiftState.showAllTutors ? '收起未報更名冊' : '展開全體名冊 (緊急頂更)';
+      }
+
+      const backupTutors = singleDayShiftState.tutors.filter(t => t.approvedSlots.length === 0 && t.originalSlots.length > 0);
+      const otherTutors = singleDayShiftState.tutors.filter(t => t.approvedSlots.length === 0 && t.originalSlots.length === 0);
+      const displayCandidates = singleDayShiftState.showAllTutors ? [...backupTutors, ...otherTutors] : backupTutors;
+
+      if (elCandList) {
+        if (displayCandidates.length === 0) {
+          elCandList.innerHTML = `<p class="text-xs text-slate-500 text-center py-3">本日無未派更之原報後備。如需安排其他導師頂更，請按右上角「展開全體名冊」。</p>`;
+        } else {
+          elCandList.innerHTML = displayCandidates.map(t => {
+            const displayName = t.name !== t.tid ? `[${t.tid}] ${t.name}` : `[${t.tid}]`;
+            const isBackup = t.originalSlots.length > 0;
+            const statusTag = isBackup
+              ? `<span class="text-[10px] text-amber-300 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded">📦 原報：${t.originalSlotsStr}</span>`
+              : `<span class="text-[10px] text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded">⚪ 未報更</span>`;
+
+            const quickAddBtns = assignableSlots.map(slot => {
+              const safeSlot = slot.replace(/'/g, "\\'");
+              return `<button type="button" onclick="assignSingleDaySlot('${t.tid}', '${safeSlot}')" class="px-2 py-1 rounded text-[10px] font-bold bg-emerald-900/60 hover:bg-emerald-600 text-emerald-200 hover:text-white border border-emerald-500/40 transition">+ 派${slot}</button>`;
+            }).join(' ');
+
+            const fullBtn = assignableSlots.length > 1
+              ? `<button type="button" onclick="assignSingleDayFullShift('${t.tid}')" class="px-2 py-1 rounded text-[10px] font-bold bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-slate-900 border border-amber-400/40 transition">+ 全時段</button>`
+              : '';
+
+            return `
+              <div class="bg-slate-950/80 p-2 rounded-lg border border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-slate-200">${displayName}</span>
+                  ${statusTag}
+                </div>
+                <div class="flex flex-wrap items-center gap-1">
+                  ${quickAddBtns}
+                  ${fullBtn}
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    }
+
+    function assignSingleDaySlot(tid, slotName) {
+      const tutor = singleDayShiftState.tutors.find(t => t.tid === tid);
+      if (!tutor) return;
+      if (!tutor.approvedSlots.includes(slotName)) {
+        tutor.approvedSlots.push(slotName);
+      }
+      renderSingleDayShiftModal();
+    }
+
+    function assignSingleDayFullShift(tid) {
+      const tutor = singleDayShiftState.tutors.find(t => t.tid === tid);
+      if (!tutor) return;
+      tutor.approvedSlots = [...getAssignableSlotsForDate(singleDayShiftState.date)];
+      renderSingleDayShiftModal();
+    }
+
+    function removeSingleDaySlot(tid, slotName) {
+      const tutor = singleDayShiftState.tutors.find(t => t.tid === tid);
+      if (!tutor) return;
+      tutor.approvedSlots = tutor.approvedSlots.filter(s => s !== slotName);
+      if (tutor.approvedSlots.length === 0) tutor.isDutyOM = false;
+      renderSingleDayShiftModal();
+    }
+
+    function clearSingleDayTutor(tid) {
+      const tutor = singleDayShiftState.tutors.find(t => t.tid === tid);
+      if (!tutor) return;
+      tutor.approvedSlots = [];
+      tutor.isDutyOM = false;
+      renderSingleDayShiftModal();
+    }
+
+    function toggleSingleDayDutyOM(tid, isChecked) {
+      const tutor = singleDayShiftState.tutors.find(t => t.tid === tid);
+      if (!tutor) return;
+      tutor.isDutyOM = isChecked;
+      renderSingleDayShiftModal();
+    }
+
+    function toggleAllTutorsPool() {
+      singleDayShiftState.showAllTutors = !singleDayShiftState.showAllTutors;
+      renderSingleDayShiftModal();
     }
 
     function closeSingleDayShiftModal() {
@@ -3831,6 +4097,10 @@
       openSingleDayShiftModal(`${y}-${m}-${day}`);
     }
 
+    // 預留接口：下一刀 (Phase 4 刀 12) 將在此接通 saveDailyApprovals 雲端原子存檔
+    async function saveSingleDayShift() {
+      customAlert('⚡ 記憶體引擎（刀 11）演算正常！\n請確認派更名單與算力跳動無誤後，通知軍師拔出最後一刀（刀 12）接通雲端存檔。');
+    }
     function loadTutorApprovalList(tutorId) {
       const container = document.getElementById('approvalListContainer');
       if (!tutorId) {
