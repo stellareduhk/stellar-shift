@@ -366,9 +366,9 @@
         </div>
       </div>
 
-      <!-- 4. 底部存檔按鈕 -->
+	  <!-- 4. 底部存檔按鈕 -->
       <div class="flex gap-2 pt-2 border-t border-slate-700">
-        <button id="btnSaveSingleDayShift" onclick="saveSingleDayShift()" type="button" class="w-full stellar-btn-gold py-2.5 rounded text-xs font-bold shadow transition">
+        <button id="btnSaveSingleDayShift" onclick="handleSaveSingleDayShiftAction()" type="button" class="w-full stellar-btn-gold py-2.5 rounded text-xs font-bold shadow transition">
           💾 確認儲存本日編更 (雲端原子更新)
         </button>
         <button onclick="closeSingleDayShiftModal()" type="button" class="w-1/3 bg-slate-800 text-slate-300 py-2.5 rounded text-xs hover:bg-slate-700">
@@ -4097,9 +4097,99 @@
       openSingleDayShiftModal(`${y}-${m}-${day}`);
     }
 
-    // 預留接口：下一刀 (Phase 4 刀 12) 將在此接通 saveDailyApprovals 雲端原子存檔
+	// 🚀 Phase 4 刀 12：單日原子級雲端存檔對接（含流動圈圈防連按鎖定）
+    function handleSaveSingleDayShiftAction() {
+      handleAsyncButtonAction('btnSaveSingleDayShift', '⚡ 正在儲存本日編更...', saveSingleDayShift);
+    }
+
     async function saveSingleDayShift() {
-      customAlert('⚡ 記憶體引擎（刀 11）演算正常！\n請確認派更名單與算力跳動無誤後，通知軍師拔出最後一刀（刀 12）接通雲端存檔。');
+      const dateStr = singleDayShiftState.date;
+      if (!dateStr) return;
+
+      // 🛡️ T-1 歷史月份防誤觸二段確認鎖
+      const currentBasePollId = `${baseOperationalYear}-${String(baseOperationalMonth).padStart(2, '0')}`;
+      if (currentPollId < currentBasePollId) {
+        const confirmPast = confirm(`⚠️ 安全鎖提示：你目前正在修改歷史月份（${currentPollId}）的排班紀錄，該月份可能已完成計糧。\n\n確定要覆蓋 ${dateStr} 的雲端紀錄嗎？`);
+        if (!confirmPast) return;
+      }
+
+      const role = localStorage.getItem('stellar_role') || '';
+      const activePwd = role === 'commander' ? 'osricky' : 'stellaros';
+
+      const submitEntries = [];
+      const approvedSummary = [];
+
+      singleDayShiftState.tutors.forEach(t => {
+        // 只封裝「當日有獲批排班」或「原本有報更紀錄（需更新為不派更）」的導師，避免污染資料庫
+        if (t.approvedSlots.length > 0 || t.hasRecord) {
+          const origArr = t.originalSlots || [];
+          const appArr = t.approvedSlots || [];
+          const rejArr = origArr.filter(s => !appArr.includes(s));
+
+          const originalStr = t.originalSlotsStr || (appArr.length > 0 ? appArr.join(', ') : '');
+          const appStr = appArr.join(', ');
+          const rejStr = rejArr.length > 0 ? rejArr.join(', ') : '無';
+          const isDutyOM = t.isDutyOM ? 'YES' : 'NO';
+
+          if (appArr.length > 0) {
+            const displayName = t.name !== t.tid ? `[${t.tid}] ${t.name}` : `[${t.tid}]`;
+            approvedSummary.push(`• ${displayName}${isDutyOM === 'YES' ? ' (⭐當值OM)' : ''}：${appStr}`);
+          }
+
+          const finalTimeSlot = appArr.length > 0 ? appStr : '不派更';
+          const rec = adminRecords.find(r => formatTutorId(r.tutorId) === t.tid && r.date === dateStr);
+          const cleanUserRemarks = (rec ? rec.remarks || '' : '').replace(/\[OM_REVIEWED\].*$/, '').replace(/\[DUTY_OM\]/g, '').trim();
+          const origTagStr = originalStr ? `[ORIG: ${originalStr}]` : '';
+          const finalRemarks = `${cleanUserRemarks} [OM_REVIEWED] ${isDutyOM === 'YES' ? '[DUTY_OM]' : ''} [REJ: ${rejStr}] ${origTagStr}`.trim();
+
+          submitEntries.push({
+            tutorId: t.tid,
+            tutorName: t.name !== t.tid ? t.name : '',
+            timeSlot: finalTimeSlot,
+            remarks: finalRemarks,
+            isDutyOM: isDutyOM
+          });
+        }
+      });
+
+      if (submitEntries.length === 0) {
+        customAlert('ℹ️ 本日暫無任何派更或變更紀錄需要儲存。');
+        return;
+      }
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'saveDailyApprovals',
+            pollId: currentPollId,
+            date: dateStr,
+            entries: submitEntries,
+            adminPassword: activePwd
+          })
+        });
+
+        const json = await res.json();
+        if (json.status === 'success') {
+          closeSingleDayShiftModal();
+          await loadRecords();
+          renderCalendar(currentYear, currentMonth);
+          if (currentView === 'matrix') {
+            renderMatrixTable(currentYear, currentMonth);
+          }
+
+          let alertHtml = `<div class="font-bold text-amber-400 mb-2">🎉 ${dateStr} 單日編更已成功原子儲存至雲端！</div>`;
+          alertHtml += `<div class="text-xs text-emerald-300 font-bold mt-1">✅ 本日正式當值名單（${approvedSummary.length} 人）：</div>`;
+          alertHtml += `<div class="text-xs text-slate-200 mt-1 space-y-0.5">${approvedSummary.join('<br>') || '（本日全數不派更）'}</div>`;
+          customAlert(alertHtml);
+        } else {
+          customAlert(`❌ 雲端存檔失敗：${json.message || '未知錯誤'}`);
+        }
+      } catch (err) {
+        console.error('Save single day shift error:', err);
+        customAlert('⚠ 雲端存檔連線失敗，請檢查網絡連線後再試。');
+      }
     }
     function loadTutorApprovalList(tutorId) {
       const container = document.getElementById('approvalListContainer');
