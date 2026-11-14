@@ -360,7 +360,7 @@
       <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2">
         <div class="flex justify-between items-center">
           <label class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-            <span>⚡ 可用戰力候選池 (點擊秒速派更)：</span>
+            <span>⚡ 備用人手 (點擊秒速派更)：</span>
           </label>
           <button type="button" onclick="toggleAllTutorsPool()" id="btnToggleAllTutors" class="text-[11px] text-purple-300 hover:text-amber-300 underline">展開全體名冊</button>
         </div>
@@ -3832,7 +3832,7 @@
         }
       });
 
-      const isWeekendOrSpecial = (dayOfWeek === 0 || dayOfWeek === 6 || configuredSpecialDates.includes(dateStr) || hasSpecialEvent);
+	  const isWeekendOrSpecial = (dayOfWeek === 0 || dayOfWeek === 6 || configuredSpecialDates.includes(dateStr));
       const baseCfg = isWeekendOrSpecial ? weekendSlotsConfig : weekdaySlotsConfig;
       const slots = baseCfg.filter(s => s !== '全時段').map(s => s.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim());
 
@@ -3865,7 +3865,7 @@
             name: meta.name || tutorsMap[tid] || tid,
             originalSlotsStr: meta.originalSlotsStr || '',
             originalSlots: meta.originalSlots || [],
-            approvedSlots: [...(meta.approvedSlots || [])],
+     		approvedSlots: (meta.approvedSlots || []).map(s => s.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim()).filter(Boolean),
             isDutyOM: meta.isDutyOM === 'YES',
             hasRecord: true
           };
