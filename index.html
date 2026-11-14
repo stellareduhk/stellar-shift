@@ -160,7 +160,7 @@
 
 	  <!-- 🌟 OM & Commander 專用按鈕 -->
       <button id="btnViewMatrix" onclick="switchView('matrix')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900">📊 導師報更矩陣</button>
-      <button id="btnKitchenMode" onclick="handleOpenApprovalModalAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]">📅 編更模式</button>
+      <button id="btnKitchenMode" onclick="switchView('kitchen')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]">📅 編更模式</button>
       <button id="btnAdminSetup" onclick="handleOpenAdminSetupAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-purple-200 border border-purple-500 hover:bg-purple-800">⚙️ 報更設定</button>
       
       <!-- 🌟 簡化單一登入按鈕 -->
@@ -4801,33 +4801,36 @@
         const demandInfo = getDynamicDemandForDate(dateStr);
         let demandTag = (isAuth && !demandInfo.isClosed && demandInfo.label !== '0/0') ? `<span class="text-[10px] text-amber-300 font-bold ml-1">[${demandInfo.label}]</span>` : '';
 
-        let demandAlertHtml = '';
-        if (isAuth && isOpenDate && !isRedDay && !demandInfo.isClosed && demandInfo.label !== '0/0') {
-            const s1Need = demandInfo.s1Need;
-            const s2Need = demandInfo.s2Need;
+	    let demandAlertHtml = '';
+        const canEditDay = (isOpenDate && !isRedDay) || hasSpecialEvent;
+        if (isAuth && canEditDay) {
+            let totalShort = 0;
+            if (!demandInfo.isClosed && demandInfo.label !== '0/0') {
+              const s1Need = demandInfo.s1Need;
+              const s2Need = demandInfo.s2Need;
 
-            const dayRecs = adminRecords.filter(r => r.date === dateStr);
-            let s1App = 0, s2App = 0;
-            dayRecs.forEach(r => {
-                const m = parseRecordMeta(r);
-                if (m.approvedSlots.some(s => s.includes('第一節') || s.includes('S1') || s.includes('全時段'))) s1App++;
-                if (m.approvedSlots.some(s => s.includes('第二節') || s.includes('S2') || s.includes('全時段'))) s2App++;
-            });
+              const dayRecs = adminRecords.filter(r => r.date === dateStr);
+              let s1App = 0, s2App = 0;
+              dayRecs.forEach(r => {
+                  const m = parseRecordMeta(r);
+                  if (m.approvedSlots.some(s => s.includes('第一節') || s.includes('S1') || s.includes('全時段'))) s1App++;
+                  if (m.approvedSlots.some(s => s.includes('第二節') || s.includes('S2') || s.includes('全時段'))) s2App++;
+              });
 
-            const s1Short = Math.max(0, s1Need - s1App);
-            const s2Short = Math.max(0, s2Need - s2App);
-            const totalShort = s1Short + s2Short;
+              const s1Short = Math.max(0, s1Need - s1App);
+              const s2Short = Math.max(0, s2Need - s2App);
+              totalShort = s1Short + s2Short;
+            }
 
-			if (totalShort > 0) {
+            if (totalShort > 0) {
                 demandAlertHtml = `<div onclick="event.stopPropagation(); openSingleDayShiftModal('${dateStr}')" class="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full alert-pulse-red shadow-lg z-10 cursor-pointer transition flex items-center gap-1 hover:scale-105" title="點擊進入單日編更模式"><span>🎯 欠 ${totalShort} 人</span><span class="bg-amber-400 text-slate-900 px-1 rounded text-[8px]">✏️</span></div>`;
-            } else if (isOpenDate && !isRedDay) {
-                // 達標但開放的日子，補上迷你編輯按鈕
+            } else {
                 demandAlertHtml = `<div onclick="event.stopPropagation(); openSingleDayShiftModal('${dateStr}')" class="absolute -top-1 -right-1 bg-amber-400 hover:bg-amber-300 text-slate-900 text-[10px] font-bold px-1 py-0.5 rounded-full shadow-lg z-10 cursor-pointer transition hover:scale-110" title="點擊微調編更">✏️</div>`;
             }
         }
 
         let cellHtml = `
-          <div onclick="handleDayClick('${dateStr}', ${isOpenDate})" class="${cellStyleClass}">
+          <div onclick="handleDayClick('${dateStr}', ${canEditDay})" class="${cellStyleClass}">
             ${demandAlertHtml}
             <div class="flex justify-between items-center">
               <span class="text-sm ${dayNumColorClass}">${day}${demandTag}</span>
