@@ -1114,6 +1114,13 @@
       const name = getRecTutorName(r, tid);
       const remarks = r.remarks || '';
       const isDutyOM = r.isDutyOM || (remarks.includes('[DUTY_OM]') ? 'YES' : 'NO');
+      let customRoles = [];
+      if (remarks.includes('[ROLE:')) {
+        const rMatch = remarks.match(/\[ROLE:\s*([^\]]+)\]/);
+        if (rMatch && rMatch[1].trim() !== '無') {
+          customRoles = rMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
       
       const isReviewed = remarks.includes('[OM_REVIEWED]') || 
                          (r.approvedSlots !== undefined && r.approvedSlots !== null && r.approvedSlots !== '') ||
@@ -1167,7 +1174,7 @@
       }
       const approvedSlots = approvedSlotsStr ? approvedSlotsStr.split(', ').map(s=>s.trim()).filter(Boolean) : [];
 
-      return { tid, name, isReviewed, originalSlotsStr, originalSlots, approvedSlots, rejectedSlots, timeSlot: r.timeSlot || '', isDutyOM };
+      return { tid, name, isReviewed, originalSlotsStr, originalSlots, approvedSlots, rejectedSlots, timeSlot: r.timeSlot || '', isDutyOM, customRoles };
     }
 
 	function switchView(view) {
@@ -3929,6 +3936,7 @@
             originalSlots: cleanOrigSlots,
             approvedSlots: (meta.approvedSlots || []).map(s => s.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim()).filter(Boolean),
             isDutyOM: meta.isDutyOM === 'YES',
+            customRoles: meta.customRoles || [],
             hasRecord: true
           };
         } else {
@@ -3939,6 +3947,7 @@
             originalSlots: [],
             approvedSlots: [],
             isDutyOM: false,
+            customRoles: [],
             hasRecord: false
           };
         }
@@ -4056,6 +4065,18 @@
                   <span class="text-[10px] text-slate-400">當值節數：</span>
                   ${slotBtns}
                 </div>
+                ${(customRolesList && customRolesList.length > 0) ? `
+                  <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/80">
+                    <span class="text-[10px] text-purple-300">🏷️ 職務標籤：</span>
+                    ${customRolesList.map(rName => {
+                      const hasRole = (t.customRoles || []).includes(rName);
+                      const safeRole = rName.replace(/'/g, "\\'");
+                      return hasRole
+                        ? `<button type="button" onclick="toggleSingleDayCustomRole('${t.tid}', '${safeRole}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-600 text-white border border-purple-300 shadow transition">🏷️ ${rName}</button>`
+                        : `<button type="button" onclick="toggleSingleDayCustomRole('${t.tid}', '${safeRole}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:border-purple-400 hover:text-purple-200 transition">+ ${rName}</button>`;
+                    }).join(' ')}
+                  </div>
+                ` : ''}
               </div>
             `;
           }).join('');
@@ -4142,6 +4163,18 @@
       renderSingleDayShiftModal();
     }
 
+    function toggleSingleDayCustomRole(tid, roleName) {
+      const tutor = singleDayShiftState.tutors.find(t => t.tid === tid);
+      if (!tutor) return;
+      if (!Array.isArray(tutor.customRoles)) tutor.customRoles = [];
+      if (tutor.customRoles.includes(roleName)) {
+        tutor.customRoles = tutor.customRoles.filter(r => r !== roleName);
+      } else {
+        tutor.customRoles.push(roleName);
+      }
+      renderSingleDayShiftModal();
+    }
+
     function toggleSingleDayDutyOM(tid, isChecked) {
       const tutor = singleDayShiftState.tutors.find(t => t.tid === tid);
       if (!tutor) return;
@@ -4211,8 +4244,10 @@
           const finalTimeSlot = appArr.length > 0 ? appStr : '不派更';
           const rec = adminRecords.find(r => formatTutorId(r.tutorId) === t.tid && r.date === dateStr);
           const cleanUserRemarks = (rec ? rec.remarks || '' : '').replace(/\[OM_REVIEWED\].*$/, '').replace(/\[DUTY_OM\]/g, '').trim();
+          const rolesArr = (appArr.length > 0 && Array.isArray(t.customRoles)) ? t.customRoles : [];
+          const roleTagStr = rolesArr.length > 0 ? `[ROLE: ${rolesArr.join(', ')}]` : '';
           const origTagStr = originalStr ? `[ORIG: ${originalStr}]` : '';
-          const finalRemarks = `${cleanUserRemarks} [OM_REVIEWED] ${isDutyOM === 'YES' ? '[DUTY_OM]' : ''} [REJ: ${rejStr}] ${origTagStr}`.trim();
+          const finalRemarks = `${cleanUserRemarks} [OM_REVIEWED] ${isDutyOM === 'YES' ? '[DUTY_OM]' : ''} ${roleTagStr} [REJ: ${rejStr}] ${origTagStr}`.trim();
 
           submitEntries.push({
             tutorId: t.tid,
@@ -4582,7 +4617,8 @@
               cellClass = isDayClosed ? 'bg-red-950/25 text-red-900/50' : 'text-slate-700';
             }
 
-			bodyHtml += `<td onclick="openSingleDayShiftModal('${dateStr}')" class="p-1 border border-slate-700 text-center ${cellClass} text-[10px] cursor-pointer hover:border-amber-400 transition" title="點擊進入 ${dateStr} 單日編更">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}</td>`;
+			const roleBadgeMat = (meta.customRoles && meta.customRoles.length > 0) ? ` <span class="text-purple-300 font-bold">[${meta.customRoles.join('/')}]</span>` : '';
+            bodyHtml += `<td onclick="openSingleDayShiftModal('${dateStr}')" class="p-1 border border-slate-700 text-center ${cellClass} text-[10px] cursor-pointer hover:border-amber-400 transition" title="點擊進入 ${dateStr} 單日編更">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}${roleBadgeMat}</td>`;`;
           } else {
             // 🌟 休息日成行通紅：完全無報更格整排紅底
             const emptyCellClass = isDayClosed ? 'bg-red-950/25 text-red-900/50' : 'text-slate-700';
@@ -4676,7 +4712,8 @@
           const weekDayStr = isNaN(dObj.getTime()) ? '' : ` (${weekDayNames[dObj.getDay()]})`;
           const dateShort = r.date.length >= 10 ? r.date.substring(5) : r.date;
           const dutyTag = meta.isDutyOM === 'YES' ? ' *(⭐ 當值 OM)*' : '';
-          approvedLines.push(`• ${dateShort}${weekDayStr} ${meta.approvedSlots.join(', ')}${dutyTag}`);
+          const roleTag = (meta.customRoles && meta.customRoles.length > 0) ? ` *[🏷️ ${meta.customRoles.join(' / ')}]*` : '';
+          approvedLines.push(`• ${dateShort}${weekDayStr} ${meta.approvedSlots.join(', ')}${dutyTag}${roleTag}`);
         }
       });
 
@@ -4929,10 +4966,11 @@
               const meta = parseRecordMeta(r);
               const displayName = meta.name || meta.tid;
               if (meta.approvedSlots.length > 0) {
+                const roleTagCal = (meta.customRoles && meta.customRoles.length > 0) ? ` <span class="text-purple-300">[${meta.customRoles.join('/')}]</span>` : '';
                 if (meta.isDutyOM === 'YES') {
-                  approvedElements.unshift(`<span class="duty-om-text"><u>✅ ${displayName} ⭐</u></span>`);
+                  approvedElements.unshift(`<span class="duty-om-text"><u>✅ ${displayName} ⭐</u>${roleTagCal}</span>`);
                 } else {
-                  approvedElements.push(`✅ ${displayName}`);
+                  approvedElements.push(`✅ ${displayName}${roleTagCal}`);
                 }
               } else if (!meta.isReviewed && meta.originalSlots.length > 0) {
                 pendingNames.push(displayName);
