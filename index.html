@@ -161,8 +161,8 @@
 	  <!-- 🌟 OM & Commander 專用按鈕 -->
       <button id="btnViewMatrix" onclick="switchView('matrix')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900">📊 導師報更矩陣</button>
       <button id="btnKitchenMode" onclick="switchView('kitchen')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]">📅 編更模式</button>
+      <button id="btnShiftAudit" onclick="openShiftAuditModal()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-900/80 text-emerald-200 border border-emerald-500 hover:bg-emerald-800 shadow-[0_0_8px_rgba(16,185,129,0.4)]">📋 排班驗收</button>
       <button id="btnAdminSetup" onclick="handleOpenAdminSetupAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-purple-200 border border-purple-500 hover:bg-purple-800">⚙️ 報更設定</button>
-      
       <!-- 🌟 簡化單一登入按鈕 -->
       <button id="btnAdminLogin" onclick="openAdminPasswordModal()" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 border border-amber-300 shadow hover:bg-amber-300">🔑 管理員登入</button>
       <button id="btnOMLogout" onclick="lockOMMode()" style="display: none;" class="px-2.5 py-2 rounded-lg text-xs font-bold bg-red-950/60 text-red-300 border border-red-800 hover:bg-red-900/80">🚪 退出管理模式</button>
@@ -316,6 +316,24 @@
       <div class="flex gap-2 pt-2 border-t border-slate-700" style="display: none;">
         <button onclick="batchApproveAll()" type="button" class="w-1/2 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/60 py-2 rounded text-xs font-bold shadow">⚡ 一鍵全選導師原報節數</button>
         <button id="btnSaveApprovals" onclick="handleSaveApprovalsAction()" type="button" class="w-1/2 stellar-btn-gold py-2 rounded text-xs shadow transition">💾 確認儲存此導師審核 (雲端存檔)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📋 全月排班驗收總控台 (Shift Audit Modal - 刀 19) -->
+  <div id="shiftAuditModal" style="display: none;" class="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-start justify-center p-3 md:p-4 pt-6 md:pt-10 z-[88]">
+    <div class="stellar-card p-5 md:p-6 rounded-2xl max-w-xl w-full relative border border-emerald-400/60 max-h-[90vh] overflow-y-auto custom-scrollbar space-y-4">
+      <button onclick="closeShiftAuditModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl">✕</button>
+      <div class="border-b border-slate-700 pb-3 pr-8">
+        <h3 id="shiftAuditTitle" class="text-lg font-bold text-emerald-400 flex items-center gap-2">
+          <span>📋 全月排班健康驗收總控台</span>
+        </h3>
+        <p class="text-[11px] text-slate-400 mt-1">自動掃描本月所有營運日之目標人手達成率與當值 OM 覆蓋率，點擊任何異常日期可直接跳轉補人。</p>
+      </div>
+      <div id="shiftAuditSummaryBar" class="grid grid-cols-3 gap-2 text-center text-xs"></div>
+      <div id="shiftAuditBody" class="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1"></div>
+      <div class="pt-2 border-t border-slate-700 flex justify-end">
+        <button onclick="closeShiftAuditModal()" type="button" class="px-5 py-2 rounded text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700">關閉驗收視窗</button>
       </div>
     </div>
   </div>
@@ -2801,6 +2819,7 @@
       const btnAdmin = document.getElementById('btnAdminSetup');
       const btnMatrix = document.getElementById('btnViewMatrix');
       const btnKitchen = document.getElementById('btnKitchenMode');
+      const btnAudit = document.getElementById('btnShiftAudit');
       
       const btnStudent = document.getElementById('btnStudentControlPanel'); // 大元帥完整系統
       const btnOMAttend = document.getElementById('btnOMAttendance');       // OM 專屬點名按鈕
@@ -2821,6 +2840,7 @@
         if (btnAdmin) btnAdmin.style.display = 'inline-block';
         if (btnMatrix) btnMatrix.style.display = 'inline-block';
         if (btnKitchen) btnKitchen.style.display = 'inline-block';
+        if (btnAudit) btnAudit.style.display = 'inline-block';
         if (btnLogout) btnLogout.style.display = 'inline-block';
         if (btnLogin) btnLogin.style.display = 'none';
         
@@ -2851,6 +2871,7 @@
         if (btnAdmin) btnAdmin.style.display = 'none';
         if (btnMatrix) btnMatrix.style.display = 'none';
         if (btnKitchen) btnKitchen.style.display = 'none';
+        if (btnAudit) btnAudit.style.display = 'none';
         if (btnStudent) btnStudent.style.display = 'none';
         if (btnOMAttend) btnOMAttend.style.display = 'none';
         if (btnMonthSetup) btnMonthSetup.style.display = 'none';
@@ -4192,6 +4213,129 @@
       if (modal) modal.style.display = 'none';
     }
 
+    function closeShiftAuditModal() {
+      const modal = document.getElementById('shiftAuditModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function openShiftAuditModal() {
+      const ym = parsePollYearMonth(currentPollId);
+      const daysInMonth = new Date(ym.year, ym.month, 0).getDate();
+      const setting = allSettingsList.find(s => s.pollId === currentPollId);
+      const closedDates = setting && setting.closedDates ? setting.closedDates.split(',').filter(Boolean) : [];
+      const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
+
+      const shortDays = [];
+      const noOMDays = [];
+      let totalOpenDays = 0;
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${ym.year}-${String(ym.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dateObj = new Date(ym.year, ym.month - 1, day);
+        const wDay = weekDayNames[dateObj.getDay()];
+
+        let hasSpecialEvent = false;
+        specialEventsList.forEach(ev => {
+          if (ev.startDate && ev.endDate && dateStr >= ev.startDate && dateStr <= ev.endDate) hasSpecialEvent = true;
+        });
+
+        const isManualClosed = closedDates.includes(dateStr);
+        const isRedDay = isManualClosed || (closedDates.length === 0 && (dateObj.getDay() === 0 || hkPublicHolidays.includes(dateStr)));
+        const isOpenDate = hasSpecialEvent || configuredOpenDates.length === 0 || configuredOpenDates.includes(dateStr);
+
+        if ((!isOpenDate || isRedDay) && !hasSpecialEvent) continue;
+        totalOpenDays++;
+
+        const dayRecs = adminRecords.filter(r => r.date === dateStr);
+        let s1App = 0, s2App = 0, totalAppTutors = 0, hasDutyOM = false;
+
+        dayRecs.forEach(r => {
+          const m = parseRecordMeta(r);
+          if (m.approvedSlots.length > 0) {
+            totalAppTutors++;
+            if (m.isDutyOM === 'YES') hasDutyOM = true;
+            if (m.approvedSlots.some(s => s.includes('第一節') || s.includes('S1') || s.includes('全時段'))) s1App++;
+            if (m.approvedSlots.some(s => s.includes('第二節') || s.includes('S2') || s.includes('全時段'))) s2App++;
+          }
+        });
+
+        const demandInfo = getDynamicDemandForDate(dateStr);
+        if (!demandInfo.isClosed && demandInfo.label !== '0/0') {
+          const s1Short = Math.max(0, demandInfo.s1Need - s1App);
+          const s2Short = Math.max(0, demandInfo.s2Need - s2App);
+          if (s1Short + s2Short > 0) {
+            shortDays.push({ dateStr, wDay, target: demandInfo.label, actual: `${s1App}/${s2App}`, shortCount: s1Short + s2Short });
+          }
+        }
+
+        if (!hasDutyOM) {
+          noOMDays.push({ dateStr, wDay, totalAppTutors });
+        }
+      }
+
+      document.getElementById('shiftAuditTitle').innerHTML = `<span>📋 ${ym.year}年${ym.month}月 全月排班健康驗收</span>`;
+
+      document.getElementById('shiftAuditSummaryBar').innerHTML = `
+        <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-700">
+          <div class="text-slate-400 text-[10px]">本月營運日數</div>
+          <div class="text-amber-300 font-bold text-base mt-0.5">${totalOpenDays} 天</div>
+        </div>
+        <div class="bg-slate-900 p-2.5 rounded-xl border ${shortDays.length > 0 ? 'border-red-500/60' : 'border-emerald-500/50'}">
+          <div class="text-slate-400 text-[10px]">人手未達標日數</div>
+          <div class="${shortDays.length > 0 ? 'text-red-400' : 'text-emerald-400'} font-bold text-base mt-0.5">${shortDays.length} 天</div>
+        </div>
+        <div class="bg-slate-900 p-2.5 rounded-xl border ${noOMDays.length > 0 ? 'border-purple-500/60' : 'border-emerald-500/50'}">
+          <div class="text-slate-400 text-[10px]">缺當值 OM 日數</div>
+          <div class="${noOMDays.length > 0 ? 'text-purple-300' : 'text-emerald-400'} font-bold text-base mt-0.5">${noOMDays.length} 天</div>
+        </div>
+      `;
+
+      let bodyHtml = '';
+      if (shortDays.length === 0 && noOMDays.length === 0) {
+        bodyHtml = `
+          <div class="bg-emerald-950/40 border border-emerald-500/50 rounded-xl p-6 text-center space-y-2">
+            <div class="text-2xl">🎉</div>
+            <div class="text-emerald-300 font-bold text-sm">全月 ${totalOpenDays} 個營運日 100% 達標！</div>
+            <div class="text-xs text-slate-300">所有日子均已滿足目標導師比例，且每日均有安排「⭐ 當值 OM」。</div>
+          </div>
+        `;
+      } else {
+        if (shortDays.length > 0) {
+          bodyHtml += `
+            <div class="bg-red-950/30 border border-red-500/40 rounded-xl p-3 space-y-2">
+              <div class="text-xs font-bold text-red-400">🔴 尚欠人手日期 (${shortDays.length} 天) —— 點擊日期直接補人：</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                ${shortDays.map(item => `
+                  <button type="button" onclick="closeShiftAuditModal(); openSingleDayShiftModal('${item.dateStr}')" class="flex justify-between items-center bg-slate-900 hover:bg-slate-800 border border-red-500/30 hover:border-amber-400 px-3 py-2 rounded-lg text-xs transition text-left">
+                    <span class="font-bold text-slate-200">${item.dateStr.substring(5)} (${item.wDay})</span>
+                    <span class="text-red-300 font-bold">欠 ${item.shortCount} 人 (${item.actual} / 目標${item.target})</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+        if (noOMDays.length > 0) {
+          bodyHtml += `
+            <div class="bg-purple-950/30 border border-purple-500/40 rounded-xl p-3 space-y-2">
+              <div class="text-xs font-bold text-purple-300">🟣 未指定「⭐ 當值 OM」日期 (${noOMDays.length} 天) —— 點擊日期補設：</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                ${noOMDays.map(item => `
+                  <button type="button" onclick="closeShiftAuditModal(); openSingleDayShiftModal('${item.dateStr}')" class="flex justify-between items-center bg-slate-900 hover:bg-slate-800 border border-purple-500/30 hover:border-amber-400 px-3 py-2 rounded-lg text-xs transition text-left">
+                    <span class="font-bold text-slate-200">${item.dateStr.substring(5)} (${item.wDay})</span>
+                    <span class="text-purple-300">已派 ${item.totalAppTutors} 人 (缺OM)</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      document.getElementById('shiftAuditBody').innerHTML = bodyHtml;
+      document.getElementById('shiftAuditModal').style.display = 'flex';
+    }
+
     function navigateSingleDayShift(delta) {
       if (!currentSingleDayShiftDate) return;
       const d = new Date(currentSingleDayShiftDate.replace(/-/g, '/'));
@@ -4618,7 +4762,7 @@
             }
 
 			const roleBadgeMat = (meta.customRoles && meta.customRoles.length > 0) ? ` <span class="text-purple-300 font-bold">[${meta.customRoles.join('/')}]</span>` : '';
-            bodyHtml += `<td onclick="openSingleDayShiftModal('${dateStr}')" class="p-1 border border-slate-700 text-center ${cellClass} text-[10px] cursor-pointer hover:border-amber-400 transition" title="點擊進入 ${dateStr} 單日編更">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}${roleBadgeMat}</td>`;`;
+            bodyHtml += `<td onclick="openSingleDayShiftModal('${dateStr}')" class="p-1 border border-slate-700 text-center ${cellClass} text-[10px] cursor-pointer hover:border-amber-400 transition" title="點擊進入 ${dateStr} 單日編更">${meta.isDutyOM === 'YES' ? '⭐ ' : ''}${slotText}${roleBadgeMat}</td>`;
           } else {
             // 🌟 休息日成行通紅：完全無報更格整排紅底
             const emptyCellClass = isDayClosed ? 'bg-red-950/25 text-red-900/50' : 'text-slate-700';
