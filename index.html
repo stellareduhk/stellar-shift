@@ -488,6 +488,15 @@
             <div id="specialEventsContainer" class="space-y-2 pt-1">
               <p class="text-xs text-slate-500 italic text-center py-2">暫未新增特別活動 / 特殊日子。</p>
             </div>
+		  </div>
+
+          <div class="bg-purple-950/40 p-3 rounded-lg border border-purple-500/40 space-y-2">
+            <label class="text-xs text-purple-300 font-bold block">🏷️ 4. 自訂特殊職務標籤 (編更專用徽章)：</label>
+            <div class="flex gap-2">
+              <input type="text" id="inputNewCustomRole" onkeydown="if(event.key==='Enter'){event.preventDefault(); addCustomRoleTag();}" placeholder="輸入職務名稱 (如: 雪熒、隨班助教)" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white focus:border-purple-400">
+              <button type="button" onclick="addCustomRoleTag()" class="bg-purple-700 hover:bg-purple-600 text-white text-xs px-3 py-1.5 rounded font-bold flex-shrink-0 transition">➕ 新增</button>
+            </div>
+            <div id="customRolesContainer" class="flex flex-wrap gap-1.5 pt-1"></div>
           </div>
         </div>
 
@@ -1018,8 +1027,9 @@
 
     // 🌟 特殊多重活動與去噪時段配置
     let specialEventsList = [];
-    let weekdaySlotsConfig = ['第一節', '第二節', '全時段'];
+	let weekdaySlotsConfig = ['第一節', '第二節', '全時段'];
     let weekendSlotsConfig = ['第三節', '全時段'];
+    let customRolesList = ['雪熒', '許晴', '隨班助教'];
 
     // 🎓 學生簽到表專用狀態庫 (v26 雙庫數據熔合 + 8大狀態矩陣)
     let scheduleActiveYear = baseOperationalYear;
@@ -1110,12 +1120,15 @@
                          (r.rejectedSlots !== undefined && r.rejectedSlots !== null && r.rejectedSlots !== '');
 
       let originalSlotsStr = '';
-      if (remarks.includes('[ORIG:')) {
+	  if (remarks.includes('[ORIG:')) {
         const match = remarks.match(/\[ORIG:\s*([^\]]+)\]/);
         if (match) originalSlotsStr = match[1].trim();
       }
       if (!originalSlotsStr) {
-        originalSlotsStr = r.originalSlot || r.timeSlot || r.timeslot || '全時段';
+        originalSlotsStr = r.originalSlot || r.timeSlot || r.timeslot || '';
+      }
+      if (originalSlotsStr === '不派更' || originalSlotsStr === '休') {
+        originalSlotsStr = '';
       }
 
       const originalSlots = getSubSlots(originalSlotsStr, r.date);
@@ -3030,7 +3043,8 @@
                 if (parsedSpec.weekdaySlots) weekdaySlotsConfig = parsedSpec.weekdaySlots;
                 if (parsedSpec.weekendSlots) weekendSlotsConfig = parsedSpec.weekendSlots;
                 if (parsedSpec.specialEvents) specialEventsList = parsedSpec.specialEvents;
-                if (parsedSpec.specialDateList) configuredSpecialDates = parsedSpec.specialDateList;
+				if (parsedSpec.specialDateList) configuredSpecialDates = parsedSpec.specialDateList;
+                if (Array.isArray(parsedSpec.customRoles)) customRolesList = parsedSpec.customRoles;
               }
             } catch (e) {
               configuredSpecialDates = targetSetting.specialDates.split(',').filter(Boolean);
@@ -3168,6 +3182,40 @@
     function removeSpecialEventRow(idx) {
       specialEventsList.splice(idx, 1);
       renderSpecialEventsUI();
+    }
+
+    function renderCustomRolesUI() {
+      const container = document.getElementById('customRolesContainer');
+      if (!container) return;
+      if (!customRolesList || customRolesList.length === 0) {
+        container.innerHTML = `<span class="text-[11px] text-slate-500 italic">暫無自訂職務標籤。</span>`;
+        return;
+      }
+      container.innerHTML = customRolesList.map((roleName, idx) => `
+        <span class="inline-flex items-center gap-1.5 bg-purple-900/70 text-purple-200 border border-purple-400/50 px-2.5 py-1 rounded-full text-xs font-bold">
+          <span>🏷️ ${roleName}</span>
+          <button type="button" onclick="removeCustomRoleTag(${idx})" class="text-red-300 hover:text-white font-bold ml-0.5">✕</button>
+        </span>
+      `).join('');
+    }
+
+    function addCustomRoleTag() {
+      const input = document.getElementById('inputNewCustomRole');
+      if (!input) return;
+      const val = input.value.trim().replace(/[\[\]:,]/g, '');
+      if (!val) return;
+      if (customRolesList.includes(val)) {
+        customAlert('⚠️ 此職務標籤已存在！');
+        return;
+      }
+      customRolesList.push(val);
+      input.value = '';
+      renderCustomRolesUI();
+    }
+
+    function removeCustomRoleTag(idx) {
+      customRolesList.splice(idx, 1);
+      renderCustomRolesUI();
     }
 
     function openAdminModalDirect() {
@@ -3854,18 +3902,23 @@
       // 1. 收集全體導師名單（結合當月有報更導師 + 常駐在職導師庫 + OM 常備名單）
       const permanentIds = permanentTutorsList.map(tr => formatTutorId(tr.tutorId)).filter(Boolean);
       const allIdsSet = new Set([...Object.keys(tutorsMap), ...permanentIds, ...omAllowList]);
-      const dayRecs = adminRecords.filter(r => r.date === dateStr);
+	  const dayRecs = adminRecords.filter(r => r.date === dateStr);
+      const validDaySlots = getAssignableSlotsForDate(dateStr);
 
       const tutorsList = Array.from(allIdsSet).sort().map(tid => {
         const rec = dayRecs.find(r => formatTutorId(r.tutorId) === tid);
         if (rec) {
           const meta = parseRecordMeta(rec);
+          const cleanOrigSlots = (meta.originalSlots || [])
+            .map(s => s.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim())
+            .filter(s => validDaySlots.includes(s));
+          const cleanOrigStr = cleanOrigSlots.join(', ');
           return {
             tid: tid,
             name: meta.name || tutorsMap[tid] || tid,
-            originalSlotsStr: meta.originalSlotsStr || '',
-            originalSlots: meta.originalSlots || [],
-     		approvedSlots: (meta.approvedSlots || []).map(s => s.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim()).filter(Boolean),
+            originalSlotsStr: cleanOrigStr,
+            originalSlots: cleanOrigSlots,
+            approvedSlots: (meta.approvedSlots || []).map(s => s.replace(/^[🟢🟣🌌]\s*/, '').replace(/\s*\(.*?\)/, '').trim()).filter(Boolean),
             isDutyOM: meta.isDutyOM === 'YES',
             hasRecord: true
           };
