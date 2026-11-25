@@ -162,6 +162,8 @@
       <button id="btnViewMatrix" onclick="switchView('matrix')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 border border-amber-500/50 hover:bg-amber-400 hover:text-slate-900">📊 導師報更矩陣</button>
       <button id="btnKitchenMode" onclick="switchView('kitchen')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-amber-300 border border-purple-500 hover:bg-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.5)]">📅 編更模式</button>
       <button id="btnShiftAudit" onclick="openShiftAuditModal()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-900/80 text-emerald-200 border border-emerald-500 hover:bg-emerald-800 shadow-[0_0_8px_rgba(16,185,129,0.4)]">📋 排班驗收</button>
+      <button id="btnQuickPublish" onclick="handleQuickPublishAction('Published')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 border border-amber-300 shadow hover:bg-amber-300">🚀 發布更表</button>
+      <button id="btnQuickDrafting" onclick="handleQuickPublishAction('Drafting')" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-blue-900/80 text-blue-200 border border-blue-500 hover:bg-blue-800">↩️ 撤回編更</button>
       <button id="btnAdminSetup" onclick="handleOpenAdminSetupAction()" style="display: none;" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-900/80 text-purple-200 border border-purple-500 hover:bg-purple-800">⚙️ 報更設定</button>
       <!-- 🌟 簡化單一登入按鈕 -->
       <button id="btnAdminLogin" onclick="openAdminPasswordModal()" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-400 text-slate-900 border border-amber-300 shadow hover:bg-amber-300">🔑 管理員登入</button>
@@ -2820,6 +2822,8 @@
       const btnMatrix = document.getElementById('btnViewMatrix');
       const btnKitchen = document.getElementById('btnKitchenMode');
       const btnAudit = document.getElementById('btnShiftAudit');
+      const btnQuickPub = document.getElementById('btnQuickPublish');
+      const btnQuickDraft = document.getElementById('btnQuickDrafting');
       
       const btnStudent = document.getElementById('btnStudentControlPanel'); // 大元帥完整系統
       const btnOMAttend = document.getElementById('btnOMAttendance');       // OM 專屬點名按鈕
@@ -2841,6 +2845,8 @@
         if (btnMatrix) btnMatrix.style.display = 'inline-block';
         if (btnKitchen) btnKitchen.style.display = 'inline-block';
         if (btnAudit) btnAudit.style.display = 'inline-block';
+        if (btnQuickPub) btnQuickPub.style.display = (pollStageStatus !== 'Published') ? 'inline-block' : 'none';
+        if (btnQuickDraft) btnQuickDraft.style.display = (pollStageStatus === 'Published') ? 'inline-block' : 'none';
         if (btnLogout) btnLogout.style.display = 'inline-block';
         if (btnLogin) btnLogin.style.display = 'none';
         
@@ -2872,6 +2878,8 @@
         if (btnMatrix) btnMatrix.style.display = 'none';
         if (btnKitchen) btnKitchen.style.display = 'none';
         if (btnAudit) btnAudit.style.display = 'none';
+        if (btnQuickPub) btnQuickPub.style.display = 'none';
+        if (btnQuickDraft) btnQuickDraft.style.display = 'none';
         if (btnStudent) btnStudent.style.display = 'none';
         if (btnOMAttend) btnOMAttend.style.display = 'none';
         if (btnMonthSetup) btnMonthSetup.style.display = 'none';
@@ -3120,7 +3128,8 @@
             updateStatusBadgeText('🔴 已截止報更', 'bg-red-500/20 text-red-400 border-red-500/40');
           } else {
             updateStatusBadge();
-          } 
+          }
+          updateOMUIState(); 
         }
       } catch (err) {
         console.error('Settings load error:', err);
@@ -4334,6 +4343,68 @@
 
       document.getElementById('shiftAuditBody').innerHTML = bodyHtml;
       document.getElementById('shiftAuditModal').style.display = 'flex';
+    }
+
+    function handleQuickPublishAction(targetStatus) {
+      const btnId = targetStatus === 'Published' ? 'btnQuickPublish' : 'btnQuickDrafting';
+      const loadingText = targetStatus === 'Published' ? '⚡ 正在正式發布更表...' : '⚡ 正在撤回至編更中...';
+      handleAsyncButtonAction(btnId, loadingText, () => quickTogglePublishStatus(targetStatus));
+    }
+
+    async function quickTogglePublishStatus(targetStatus) {
+      const ym = parsePollYearMonth(currentPollId);
+      const confirmMsg = targetStatus === 'Published'
+        ? `🚀 確定要正式發布【${ym.year}年${ym.month}月】確定更表嗎？\n\n發布後：\n1. 全體導師即可查詢最新更表\n2. 矩陣圖「📋 複製更表」WhatsApp 發送功能將立即解鎖`
+        : `↩️ 確定要將【${ym.year}年${ym.month}月】更表撤回至【🔵 編更中】嗎？\n\n撤回後外部導師將暫時無法看到草稿更表，方便 OM 繼續微調。`;
+
+      if (!confirm(confirmMsg)) return;
+
+      const role = localStorage.getItem('stellar_role') || '';
+      const activePwd = role === 'commander' ? 'osricky' : 'stellaros';
+      const existingSetting = allSettingsList.find(s => s.pollId === currentPollId) || {};
+
+      const newTitle = targetStatus === 'Published'
+        ? `${ym.month}月 確定更表 (已發布)`
+        : `${ym.month}月 編更中`;
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'saveSettings',
+            pollId: currentPollId,
+            title: newTitle,
+            month: currentPollId,
+            status: targetStatus,
+            timeSlots: existingSetting.timeSlots || configuredTimeSlots.join(','),
+            deadline: existingSetting.deadline || pollDeadlineStr || '',
+            openDates: existingSetting.openDates || configuredOpenDates.join(','),
+            closedDates: existingSetting.closedDates || '',
+            specialDates: existingSetting.specialDates || '',
+            adminPassword: activePwd
+          })
+        });
+
+        const json = await res.json();
+        if (json.status === 'success') {
+          await loadSettings();
+          await loadRecords();
+          renderCalendar(currentYear, currentMonth);
+          if (currentView === 'matrix') renderMatrixTable(currentYear, currentMonth);
+
+          if (targetStatus === 'Published') {
+            customAlert(`🎉 【${ym.year}年${ym.month}月】更表已正式發布！\n\n現在可以前往「📊 導師報更矩陣」點擊「📋 複製更表」發送 WhatsApp 給各導師。`);
+          } else {
+            customAlert(`↩️ 【${ym.year}年${ym.month}月】更表已撤回至【🔵 編更中】狀態，可繼續安全微調。`);
+          }
+        } else {
+          customAlert(`❌ 狀態切換失敗：${json.message || '未知錯誤'}`);
+        }
+      } catch (err) {
+        console.error('Quick publish toggle error:', err);
+        customAlert('⚠️ 連線失敗，請檢查網路後再試。');
+      }
     }
 
     function navigateSingleDayShift(delta) {
