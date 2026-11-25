@@ -3281,7 +3281,14 @@
         specialEventsList = [];
       }
 
+	  if (targetSetting && targetSetting.specialDates) {
+        try {
+          const pSpec = JSON.parse(targetSetting.specialDates);
+          if (pSpec && Array.isArray(pSpec.customRoles)) customRolesList = pSpec.customRoles;
+        } catch(e) {}
+      }
       renderSpecialEventsUI();
+      renderCustomRolesUI();
       loadSelectedMonthSeedData(pollId);
     }
 
@@ -3346,7 +3353,8 @@
         weekdaySlots: wdSlots,
         weekendSlots: weSlots,
         specialEvents: specialEventsList,
-        specialDateList: specialDatesArr
+	  specialDateList: specialDatesArr,
+        customRoles: customRolesList
       });
 
       try {
@@ -3630,7 +3638,8 @@
         weekdaySlots: weekdaySlotsConfig,
         weekendSlots: weekendSlotsConfig,
         specialEvents: specialEventsList,
-        specialDateList: specialDatesArr
+        specialDateList: specialDatesArr,
+        customRoles: customRolesList
       });
 
       try {
